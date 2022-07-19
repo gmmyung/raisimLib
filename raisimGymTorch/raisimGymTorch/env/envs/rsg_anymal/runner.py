@@ -88,6 +88,15 @@ for update in range(1000000):
     average_dones = 0.
 
     if update % cfg['environment']['eval_every_n'] == 0:
+        # # test printMsg function
+        # # start timer
+        # start_time = time.time()
+        # env.printMsg("evaluating...")
+        # # end timer
+        # end_time = time.time()
+        # print("evaluation time: ", end_time - start_time)
+        
+        
         print("Visualizing and evaluating the current policy")
         torch.save({
             'actor_architecture_state_dict': actor.architecture.state_dict(),

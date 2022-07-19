@@ -40,6 +40,12 @@ class RaisimGymEnv {
   virtual void setSeed(int seed) {};
   ////////////////////////////////
 
+
+  /////// My addition ///////
+  virtual void printMsg(const std::string& msg) {};
+  virtual void setState(const Eigen::Ref<EigenVec>& state) {};
+  ///////////////////////////
+
   void setSimulationTimeStep(double dt) { simulation_dt_ = dt; world_->setTimeStep(dt); }
   void setControlTimeStep(double dt) { control_dt_ = dt; }
   int getObDim() { return obDim_; }

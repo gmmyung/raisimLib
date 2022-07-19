@@ -32,6 +32,13 @@ class RaisimGymVecEnv:
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
 
+    ## My own functions
+    def printMsg(self, msg):
+        self.wrapper.printMsg(msg)
+    
+    def setState(self, state):
+        self.wrapper.setState(state)
+
     def turn_on_visualization(self):
         self.wrapper.turnOnVisualization()
 

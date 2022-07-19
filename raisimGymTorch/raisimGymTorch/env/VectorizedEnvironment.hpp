@@ -80,6 +80,21 @@ class VectorizedEnvironment {
       env->reset();
   }
 
+  // My addition:
+
+  void printMsg(const std::string& msg) {
+    for (int i = 0; i < num_envs_; i++){
+      environments_[num_envs_]->printMsg(msg);
+      std::cout<<i;
+    }
+  }
+
+  void setState(Eigen::Ref<EigenRowMajorMat> &state) {
+#pragma omp parallel for schedule(auto)
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->setState(state.row(i));
+  }
+
   void observe(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)

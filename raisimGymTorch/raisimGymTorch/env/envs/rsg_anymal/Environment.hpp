@@ -48,7 +48,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 34;
+    obDim_ = gcDim_ + gvDim_;
     actionDim_ = nJoints_; actionMean_.setZero(actionDim_); actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
 
@@ -80,6 +80,21 @@ class ENVIRONMENT : public RaisimGymEnv {
     updateObservation();
   }
 
+  /// My functions
+  void printMsg(const std::string& msg) final {
+    std::cout<<msg;
+  }
+  
+  void setState(const Eigen::Ref<EigenVec>& state) final {
+    Eigen::VectorXd inputState = state.cast<double>();
+    Eigen::VectorXd gc = inputState.head(gcDim_);
+    Eigen::VectorXd gv = inputState.tail(gvDim_);
+    obDouble_ << gc, gv;
+    anymal_->setState(gc, gv);
+  }
+  /////////////////
+
+  
   float step(const Eigen::Ref<EigenVec>& action) final {
     /// action scaling
     pTarget12_ = action.cast<double>();
@@ -112,11 +127,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
-    obDouble_ << gc_[2], /// body height
-        rot.e().row(2).transpose(), /// body orientation
-        gc_.tail(12), /// joint angles
-        bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-        gv_.tail(12); /// joint velocity
+    obDouble_ << gc_, gv_;
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
@@ -136,7 +147,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     return false;
   }
 
-  void curriculumUpdate() { };
+  void curriculumUpdate() {};
 
  private:
   int gcDim_, gvDim_, nJoints_;
