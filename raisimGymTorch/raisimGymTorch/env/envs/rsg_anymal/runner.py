@@ -1,3 +1,4 @@
+from random import setstate
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from raisimGymTorch.env.bin.rsg_anymal import RaisimGymEnv
 from raisimGymTorch.env.bin.rsg_anymal import NormalSampler
@@ -13,6 +14,7 @@ import numpy as np
 import torch
 import datetime
 import argparse
+from model import Model
 
 
 # task specification
@@ -62,7 +64,7 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+# tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -79,6 +81,12 @@ ppo = PPO.PPO(actor=actor,
 
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
+################# World model #################
+
+world_model = Model(device=device,ob_dim=ob_dim,act_dim=act_dim)
+
+###############################################
+
 
 for update in range(1000000):
     start = time.time()
@@ -88,15 +96,6 @@ for update in range(1000000):
     average_dones = 0.
 
     if update % cfg['environment']['eval_every_n'] == 0:
-        # # test printMsg function
-        # # start timer
-        # start_time = time.time()
-        # env.printMsg("evaluating...")
-        # # end timer
-        # end_time = time.time()
-        # print("evaluation time: ", end_time - start_time)
-        
-        
         print("Visualizing and evaluating the current policy")
         torch.save({
             'actor_architecture_state_dict': actor.architecture.state_dict(),
@@ -110,13 +109,50 @@ for update in range(1000000):
 
         env.turn_on_visualization()
         env.start_video_recording(datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "policy_"+str(update)+'.mp4')
-
+        
+        # dummystate = np.zeros((env.num_envs, ob_dim), dtype=np.float32)
+        # dummystate[:, 0] = 0.5
+        # dummystate[:, 1] = 0.5
+        # b = 0
+        # c = 0
+        # for i in range(1000):
+        #     env.setState(dummystate)
+        #     dummystate[:,4:] += 0.01
+        #     dummystate[:,1] = -np.sin(b)
+        #     dummystate[:,2] = np.cos(b) * np.sin(c)
+        #     dummystate[:,3] = np.cos(b) * np.cos(c)
+        #     dummystate[:,0] += 0.01
+        #     time.sleep(0.01)
+        #     b += 0.01
+        #     c += 0.01
+        #     env.setState(dummystate + 0.01)
+        # for step in range(n_steps*2):
+        #     with torch.no_grad():
+        #         frame_start = time.time()
+        #         obs = env.observe(False)
+        #         action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
+        #         reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
+        #         env.setState(obs)
+        #         #time.sleep(1)
+        #         frame_end = time.time()
+        #         wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
+        #         if wait_time > 0.:
+        #             time.sleep(wait_time)
+        env.curriculum_callback()
+        for step in range(100):
+            obs = env.observe(False)
+            action = ppo.act(obs)
+            env.step(action)
+            world_model.add_history_obs_numpy(obs)
+        print(obs[0, :])
+        env.setState(obs)
         for step in range(n_steps*2):
             with torch.no_grad():
                 frame_start = time.time()
-                obs = env.observe(False)
                 action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
-                reward_ll, dones = env.step(action_ll.cpu().detach().numpy())
+                obs = world_model.forward(action_ll.cpu().detach().numpy()).cpu().detach().numpy()
+                world_model.add_history_obs_numpy(obs)
+                env.setState(obs)
                 frame_end = time.time()
                 wait_time = cfg['environment']['control_dt'] - (frame_end-frame_start)
                 if wait_time > 0.:
@@ -129,13 +165,20 @@ for update in range(1000000):
         env.save_scaling(saver.data_dir, str(update))
 
     # actual training
+    world_model.reset()
+    world_loss_sum = 0
     for step in range(n_steps):
         obs = env.observe()
+        if step != 0: 
+            world_loss_sum += world_model.update(action, obs)
+        world_model.add_history_obs_numpy(obs) # add history obs to the world model
         action = ppo.act(obs)
         reward, dones = env.step(action)
         ppo.step(value_obs=obs, rews=reward, dones=dones)
         done_sum = done_sum + np.sum(dones)
         reward_ll_sum = reward_ll_sum + np.sum(reward)
+    
+    world_loss_sum /= n_steps
 
     # take st step to get value obs
     obs = env.observe()
@@ -151,6 +194,8 @@ for update in range(1000000):
     env.curriculum_callback()
 
     end = time.time()
+
+    print("world_loss: ", world_loss_sum)
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))
