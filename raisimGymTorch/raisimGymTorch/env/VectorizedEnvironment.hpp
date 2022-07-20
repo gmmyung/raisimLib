@@ -91,8 +91,9 @@ class VectorizedEnvironment {
 
   void setState(Eigen::Ref<EigenRowMajorMat> &state) {
 #pragma omp parallel for schedule(auto)
-    for (int i = 0; i < num_envs_; i++)
+    for (int i = 0; i < num_envs_; i++){
       environments_[i]->setState(state.row(i));
+    }
   }
 
   void observe(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {

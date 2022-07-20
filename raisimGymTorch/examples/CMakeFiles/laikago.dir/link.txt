@@ -1,0 +1,1 @@
+/usr/bin/c++  -g   CMakeFiles/laikago.dir/src/server/laikago.cpp.o  -o laikago  -Wl,-rpath,/home/audrud/raisimlib/raisim/linux/lib ../../raisim/linux/lib/libraisim.so -lpthread ../../raisim/linux/lib/libraisimPng.so ../../raisim/linux/lib/libraisimZ.so ../../raisim/linux/lib/libraisimODE.so ../../raisim/linux/lib/libraisimMine.so 

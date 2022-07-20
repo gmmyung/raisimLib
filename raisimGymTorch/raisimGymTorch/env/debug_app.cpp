@@ -11,9 +11,11 @@ int THREAD_COUNT = 1;
 using namespace raisim;
 
 int main(int argc, char *argv[]) {
-  RSFATAL_IF(argc != 3, "got "<<argc<<" arguments. "<<"This executable takes three arguments: 1. resource directory, 2. configuration file")
+  //RSFATAL_IF(argc != 3, "got "<<argc<<" arguments. "<<"This executable takes three arguments: 1. resource directory, 2. configuration file")
+  //std::string resourceDir(argv[1]), cfgFile(argv[2]);
 
-  std::string resourceDir(argv[1]), cfgFile(argv[2]);
+  std::string resourceDir = "/home/audrud/raisimlib/rsc/";
+  std::string cfgFile = "/home/audrud/raisimlib/raisimGymTorch/raisimGymTorch/env/debug_cfg.yaml";
   std::ifstream myfile (cfgFile);
   std::string config_str, line;
   bool escape = false;
@@ -51,6 +53,8 @@ int main(int argc, char *argv[]) {
 
   vecEnv.reset();
   vecEnv.step(action_ref, reward_ref, dones_ref);
+  std::cout<<ob_ref.size()<<std::endl;
+  vecEnv.setState(ob_ref);
 
   return 0;
 }

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <set>
 #include "../../RaisimGymEnv.hpp"
+#include <cmath>
 
 namespace raisim {
 
@@ -48,7 +49,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = gcDim_ + gvDim_;
+    obDim_ = 34;
     actionDim_ = nJoints_; actionMean_.setZero(actionDim_); actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
 
@@ -87,10 +88,34 @@ class ENVIRONMENT : public RaisimGymEnv {
   
   void setState(const Eigen::Ref<EigenVec>& state) final {
     Eigen::VectorXd inputState = state.cast<double>();
-    Eigen::VectorXd gc = inputState.head(gcDim_);
-    Eigen::VectorXd gv = inputState.tail(gvDim_);
-    obDouble_ << gc, gv;
-    anymal_->setState(gc, gv);
+    raisim::Vec<4> quat;
+    raisim::Mat<3,3> rot;
+
+    // gc size : 19 3+4+12 (pos + quat + joint)
+    // gv size : 18 3+3+12 (lin + ang + joint)
+    
+    double bsin = -inputState(1);
+    double bcos = std::sqrt(inputState(2)*inputState(2)+inputState(3)*inputState(3));
+    double csin = inputState(2) / bcos;
+    double ccos = inputState(3) / bcos;
+    
+    rot.e() << bcos, - bsin * csin, bsin * ccos,
+           0, ccos, -csin,
+           -bsin, bcos * csin, bcos * ccos;
+    
+    raisim::rotMatToQuat(rot, quat); 
+
+    gc_[3] = quat[0]; gc_[4] = quat[1]; gc_[5] = quat[2]; gc_[6] = quat[3];
+
+    gc_(2) = inputState(0); // body height
+    gc_.segment(7,12) = inputState.segment(4,12); // joint positions
+    gv_.segment(6,12) = inputState.segment(22,12); // joint velocities
+    
+
+    gv_.segment(0,3) = rot.e() * inputState.segment(16,3); // body linear velocity
+    gv_.segment(3,3) = rot.e() * inputState.segment(19,3); // body angular velocity
+    
+    anymal_->setState(gc_, gv_);
   }
   /////////////////
 
@@ -127,7 +152,11 @@ class ENVIRONMENT : public RaisimGymEnv {
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
-    obDouble_ << gc_, gv_;
+    obDouble_ << gc_[2], /// body height
+        rot.e().row(2).transpose(), /// body orientation
+        gc_.tail(12), /// joint angles
+        bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
+        gv_.tail(12); /// joint velocity
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
@@ -147,7 +176,7 @@ class ENVIRONMENT : public RaisimGymEnv {
     return false;
   }
 
-  void curriculumUpdate() {};
+  void curriculumUpdate() { };
 
  private:
   int gcDim_, gvDim_, nJoints_;
