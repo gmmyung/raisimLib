@@ -107,6 +107,7 @@ class ENVIRONMENT : public RaisimGymEnv {
 
     gc_[3] = quat[0]; gc_[4] = quat[1]; gc_[5] = quat[2]; gc_[6] = quat[3];
 
+
     gc_(2) = inputState(0); // body height
     gc_.segment(7,12) = inputState.segment(4,12); // joint positions
     gv_.segment(6,12) = inputState.segment(22,12); // joint velocities
@@ -115,6 +116,8 @@ class ENVIRONMENT : public RaisimGymEnv {
     gv_.segment(0,3) = rot.e() * inputState.segment(16,3); // body linear velocity
     gv_.segment(3,3) = rot.e() * inputState.segment(19,3); // body angular velocity
     
+    gc_.segment(0,3) += gv_.segment(0,3) * 0.01; // body position
+
     anymal_->setState(gc_, gv_);
   }
   /////////////////

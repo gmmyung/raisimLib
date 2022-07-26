@@ -10,10 +10,11 @@ class Model(nn.Module):
         self.fc1 = nn.Linear(ob_dim * 4 + act_dim, 128, device = device)
         self.fc2 = nn.Linear(128, 128, device = device)
         self.fc3 = nn.Linear(128, 128, device = device)
-        self.fc4 = nn.Linear(128, 64, device = device)
-        self.fc5 = nn.Linear(64, ob_dim, device = device)
+        self.fc4 = nn.Linear(128, 128, device = device)
+        self.fc5 = nn.Linear(128, 64, device = device)
+        self.fc6 = nn.Linear(64, ob_dim, device = device)
         self.device = device
-        self.optimizer = optim.Adam(self.parameters(), lr=1e-5)
+        self.optimizer = optim.Adam(self.parameters(), lr=5e-6)
         self.history_obs = [None] * 4
         self.obs_counter = 0
 
@@ -41,7 +42,8 @@ class Model(nn.Module):
         x = torch.tanh(self.fc2(x))
         x = torch.tanh(self.fc3(x))
         x = torch.tanh(self.fc4(x))
-        x = self.fc5(x)
+        x = torch.tanh(self.fc5(x))
+        x = self.fc6(x)
         return x
     
     def criterion(self, res, pred):

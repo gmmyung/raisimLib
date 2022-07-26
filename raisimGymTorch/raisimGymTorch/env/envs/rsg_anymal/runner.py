@@ -144,13 +144,14 @@ for update in range(1000000):
             action = ppo.act(obs)
             env.step(action)
             world_model.add_history_obs_numpy(obs)
+            env.setState(obs)
         print(obs[0, :])
         env.setState(obs)
         for step in range(n_steps*2):
             with torch.no_grad():
                 frame_start = time.time()
-                action_ll = loaded_graph.architecture(torch.from_numpy(obs).cpu())
-                obs = world_model.forward(action_ll.cpu().detach().numpy()).cpu().detach().numpy()
+                action = ppo.act(obs)
+                obs = world_model.forward(action).cpu().detach().numpy()
                 world_model.add_history_obs_numpy(obs)
                 env.setState(obs)
                 frame_end = time.time()
@@ -165,6 +166,7 @@ for update in range(1000000):
         env.save_scaling(saver.data_dir, str(update))
 
     # actual training
+    env.reset()
     world_model.reset()
     world_loss_sum = 0
     for step in range(n_steps):
