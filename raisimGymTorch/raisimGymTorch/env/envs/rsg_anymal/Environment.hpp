@@ -5,24 +5,29 @@
 
 #pragma once
 
-#include <stdlib.h>
-#include <set>
 #include "../../RaisimGymEnv.hpp"
+#include <pybind11/pybind11.h>
+#include <set>
+#include <stdlib.h>
+
+namespace py = pybind11;
 
 namespace raisim {
 
 class ENVIRONMENT : public RaisimGymEnv {
 
- public:
-
-  explicit ENVIRONMENT(const std::string& resourceDir, const Yaml::Node& cfg, bool visualizable) :
-      RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable), normDist_(0, 1) {
+public:
+  explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg,
+                       bool visualizable)
+      : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable),
+        normDist_(0, 1) {
 
     /// create world
     world_ = std::make_unique<raisim::World>();
 
     /// add objects
-    anymal_ = world_->addArticulatedSystem(resourceDir_+"/anymal/urdf/anymal.urdf");
+    anymal_ =
+        world_->addArticulatedSystem(resourceDir_ + "/anymal/urdf/anymal.urdf");
     anymal_->setName("anymal");
     anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
     world_->addGround();
@@ -33,33 +38,43 @@ class ENVIRONMENT : public RaisimGymEnv {
     nJoints_ = gvDim_ - 6;
 
     /// initialize containers
-    gc_.setZero(gcDim_); gc_init_.setZero(gcDim_);
-    gv_.setZero(gvDim_); gv_init_.setZero(gvDim_);
-    pTarget_.setZero(gcDim_); vTarget_.setZero(gvDim_); pTarget12_.setZero(nJoints_);
+    gc_.setZero(gcDim_);
+    gc_init_.setZero(gcDim_);
+    gv_.setZero(gvDim_);
+    gv_init_.setZero(gvDim_);
+    pTarget_.setZero(gcDim_);
+    vTarget_.setZero(gvDim_);
+    pTarget12_.setZero(nJoints_);
 
     /// this is nominal configuration of anymal
-    gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8, -0.03, 0.4, -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8;
+    gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8, -0.03, 0.4,
+        -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8;
 
     /// set pd gains
     Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
-    jointPgain.setZero(); jointPgain.tail(nJoints_).setConstant(50.0);
-    jointDgain.setZero(); jointDgain.tail(nJoints_).setConstant(0.2);
+    jointPgain.setZero();
+    jointPgain.tail(nJoints_).setConstant(50.0);
+    jointDgain.setZero();
+    jointDgain.tail(nJoints_).setConstant(0.2);
     anymal_->setPdGains(jointPgain, jointDgain);
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 34;
-    actionDim_ = nJoints_; actionMean_.setZero(actionDim_); actionStd_.setZero(actionDim_);
+    obDim_ = 35;
+    actionDim_ = nJoints_;
+    actionMean_.setZero(actionDim_);
+    actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
     double action_std;
-    READ_YAML(double, action_std, cfg_["action_std"]) /// example of reading params from the config
+    READ_YAML(double, action_std,
+              cfg_["action_std"]) /// example of reading params from the config
     actionStd_.setConstant(action_std);
 
     /// Reward coefficients
-    rewards_.initializeFromConfigurationFile (cfg["reward"]);
+    rewards_.initializeFromConfigurationFile(cfg["reward"]);
 
     /// indices of links that should not make contact with ground
     footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
@@ -75,14 +90,14 @@ class ENVIRONMENT : public RaisimGymEnv {
     }
   }
 
-  void init() final { }
+  void init() final {}
 
   void reset() final {
     anymal_->setState(gc_init_, gv_init_);
     updateObservation();
   }
 
-  float step(const Eigen::Ref<EigenVec>& action) final {
+  float step(const Eigen::Ref<EigenVec> &action) final {
     /// action scaling
     pTarget12_ = action.cast<double>();
     pTarget12_ = pTarget12_.cwiseProduct(actionStd_);
@@ -91,10 +106,12 @@ class ENVIRONMENT : public RaisimGymEnv {
 
     anymal_->setPdTarget(pTarget_, vTarget_);
 
-    for(int i=0; i< int(control_dt_ / simulation_dt_ + 1e-10); i++){
-      if(server_) server_->lockVisualizationServerMutex();
+    for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
+      if (server_)
+        server_->lockVisualizationServerMutex();
       world_->integrate();
-      if(server_) server_->unlockVisualizationServerMutex();
+      if (server_)
+        server_->unlockVisualizationServerMutex();
     }
 
     updateObservation();
@@ -108,17 +125,44 @@ class ENVIRONMENT : public RaisimGymEnv {
   void updateObservation() {
     anymal_->getState(gc_, gv_);
     raisim::Vec<4> quat;
-    raisim::Mat<3,3> rot;
-    quat[0] = gc_[3]; quat[1] = gc_[4]; quat[2] = gc_[5]; quat[3] = gc_[6];
+    raisim::Mat<3, 3> rot;
+    quat[0] = gc_[3];
+    quat[1] = gc_[4];
+    quat[2] = gc_[5];
+    quat[3] = gc_[6];
     raisim::quatToRotMat(quat, rot);
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
-    obDouble_ << gc_[2], /// body height
-        rot.e().row(2).transpose(), /// body orientation
-        gc_.tail(12), /// joint angles
+    obDouble_
+        << gc_[2], /// body height
+                   // rot.e().row(2).transpose(),      /// body orientation
+        gc_.segment(3, 4),               /// body orientation quaternion
+        gc_.tail(12),                    /// joint angles
         bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-        gv_.tail(12); /// joint velocity
+        gv_.tail(12);                    /// joint velocity
+                                         //                                  //
+    //                                  anymal_->getGeneralizedForce().e();
+    // << gc_[2],
+    // rot.e().row(2).transpose(), gc_.tail(12), gv_.tail(12), bodyLinearVel_,
+    // bodyAngularVel_, gv_.tail(12);
+  }
+
+  void setObservation(const Eigen::Ref<EigenVec> &ob) {
+    // define zero matrix obs_gc
+    obs_gc_ = Eigen::VectorXd::Zero(gcDim_);
+    auto ob_double = ob.cast<double>();
+    // copy body height
+    obs_gc_[2] = ob_double[0];
+    // copy body orientation
+    obs_gc_.segment(3, 4) = ob_double.segment(1, 4);
+    // copy joint angles
+    obs_gc_.tail(12) = ob_double.segment(5, 12);
+
+    // set gv to zero
+    obs_gv_ = Eigen::VectorXd::Zero(gvDim_);
+
+    anymal_->setState(obs_gc_, obs_gv_);
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
@@ -126,35 +170,37 @@ class ENVIRONMENT : public RaisimGymEnv {
     ob = obDouble_.cast<float>();
   }
 
-  bool isTerminalState(float& terminalReward) final {
-    terminalReward = float(terminalRewardCoeff_);
-
-    /// if the contact body is not feet
-    for(auto& contact: anymal_->getContacts())
-      if(footIndices_.find(contact.getlocalBodyIndex()) == footIndices_.end())
-        return true;
-
-    terminalReward = 0.f;
+  bool isTerminalState(float &terminalReward) final {
+    // terminalReward = float(terminalRewardCoeff_);
+    //
+    // /// if the contact body is not feet
+    // for (auto &contact : anymal_->getContacts())
+    //   if (footIndices_.find(contact.getlocalBodyIndex()) ==
+    //   footIndices_.end())
+    //     return true;
+    //
+    // terminalReward = 0.f;
     return false;
   }
 
-  void curriculumUpdate() { };
+  void curriculumUpdate() {};
 
- private:
+private:
   int gcDim_, gvDim_, nJoints_;
   bool visualizable_ = false;
-  raisim::ArticulatedSystem* anymal_;
+  raisim::ArticulatedSystem *anymal_;
   Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
+  Eigen::VectorXd obs_gc_, obs_gv_;
   double terminalRewardCoeff_ = -10.;
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
 
-  /// these variables are not in use. They are placed to show you how to create a random number sampler.
+  /// these variables are not in use. They are placed to show you how to create
+  /// a random number sampler.
   std::normal_distribution<double> normDist_;
   thread_local static std::mt19937 gen_;
 };
 thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
 
-}
-
+} // namespace raisim

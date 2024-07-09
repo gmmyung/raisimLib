@@ -14,22 +14,32 @@ from stable_baselines3.common.vec_env.base_vec_env import VecEnv, VecEnvIndices,
 class RaisimSbGymVecEnv(VecEnv):
     metadata = {}
 
-    def __init__(self, impl, normalize_ob=True, seed=0, clip_obs=10.):
+    def __init__(self, impl, normalize_ob=True, seed=0, clip_obs=10.0):
         if platform.system() == "Darwin":
-            os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+            os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
         self.normalize_ob = normalize_ob
         self.clip_obs = clip_obs
         self.wrapper = impl
         self.num_obs = self.wrapper.getObDim()
         self.num_acts = self.wrapper.getActionDim()
-        self.observation_space = gym.spaces.Box(-np.full(self.num_obs, 1e6, np.float32), np.full(self.num_obs, 1e6, np.float32), dtype=np.float32)
-        self.action_space = gym.spaces.Box(-np.full(self.num_acts, 1e6, np.float32), np.full(self.num_acts, 1e6, np.float32), dtype=np.float32)
-        super(RaisimSbGymVecEnv, self).__init__(self.wrapper.getNumOfEnvs(), self.observation_space, self.action_space)
+        self.observation_space = gym.spaces.Box(
+            -np.full(self.num_obs, 1e6, np.float32),
+            np.full(self.num_obs, 1e6, np.float32),
+            dtype=np.float32,
+        )
+        self.action_space = gym.spaces.Box(
+            -np.full(self.num_acts, 1e6, np.float32),
+            np.full(self.num_acts, 1e6, np.float32),
+            dtype=np.float32,
+        )
+        super(RaisimSbGymVecEnv, self).__init__(
+            self.wrapper.getNumOfEnvs(), self.observation_space, self.action_space
+        )
 
         self._observation = np.zeros([self.num_envs, self.num_obs], dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=np.bool)
-        self._info =[{} for k in range(self.num_envs)]
+        self._info = [{} for k in range(self.num_envs)]
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
         self.actions = None
@@ -57,9 +67,20 @@ class RaisimSbGymVecEnv(VecEnv):
 
     def step_wait(self):
         self.wrapper.step(self.actions, self._reward, self._done)
-        return self.observe(self.normalize_ob).copy(), self._reward.copy(), self._done.copy(), self._info
+        return (
+            self.observe(self.normalize_ob).copy(),
+            self._reward.copy(),
+            self._done.copy(),
+            self._info,
+        )
 
-    def env_method(self, method_name: str, *method_args, indices: VecEnvIndices = None, **method_kwargs):
+    def env_method(
+        self,
+        method_name: str,
+        *method_args,
+        indices: VecEnvIndices = None,
+        **method_kwargs,
+    ):
         pass
 
     def get_attr(self, attr_name: str, indices: VecEnvIndices = None):
@@ -98,15 +119,15 @@ class RaisimSbGymVecEnv(VecEnv):
     def curriculum_callback(self):
         self.wrapper.curriculumUpdate()
 
-    def render(self, mode='human'):
+    def render(self, mode="human"):
         pass
 
-    def env_is_wrapped(self, wrapper_class: Type[gym.Wrapper], indices: VecEnvIndices = None) -> List[bool]:
+    def env_is_wrapped(
+        self, wrapper_class: Type[gym.Wrapper], indices: VecEnvIndices = None
+    ) -> List[bool]:
         """Check if worker environments are wrapped with a given wrapper"""
         target_envs = self._get_target_envs(indices)
         # Import here to avoid a circular import
         from stable_baselines3.common import env_util
 
         return [env_util.is_wrapped(env_i, wrapper_class) for env_i in target_envs]
-
-
