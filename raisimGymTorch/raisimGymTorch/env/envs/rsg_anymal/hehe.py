@@ -16,6 +16,15 @@ import shutil
 
 # POC of training a world model in Raisim
 
+episode_num = 5000
+episode_len = 200
+bptt_window = 128
+bptt_step = 5
+test_ratio = 0.2
+train_epoch = 4000
+batch_size = 128
+learning_rate = 0.001
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-m", "--mode", help="set mode either train or test", type=str, default="train"
@@ -42,8 +51,6 @@ env.seed(cfg["seed"])
 env.reset()
 print("ob_dim:", env.num_obs, "/ act_dim:", env.num_acts, "/ num_envs:", env.num_envs)
 
-# World Rollout
-
 
 def random_action(num_envs, length, num_acts):
     # random walk
@@ -56,16 +63,13 @@ def random_action(num_envs, length, num_acts):
     return actions.astype(np.float32)
 
 
-episode_num = 5000
-episode_len = 200
-
 states_history = np.zeros((episode_num, episode_len, env.num_obs))
 action_history = np.zeros((episode_num, episode_len, env.num_acts))
 states_timeseries = np.zeros((env.num_envs, episode_len, env.num_obs))
 action_timeseries = np.zeros((env.num_envs, episode_len, env.num_acts))
 time_step = cfg["environment"]["control_dt"]
 
-
+# World Rollout
 for j in tqdm(range(episode_num // env.num_envs + 1)):
     env.reset()
     if j % 1 == 0:
@@ -99,9 +103,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Create RNN training sequences
 states_history = torch.from_numpy(states_history).type(torch.float32).to(device)
 action_history = torch.from_numpy(action_history).type(torch.float32).to(device)
-bptt_window = 128
-bptt_step = 5
-test_ratio = 0.2
 
 test_episode_num = int(episode_num * test_ratio)
 train_episode_num = episode_num - test_episode_num
@@ -119,6 +120,7 @@ def build_sequence(input: torch.Tensor) -> torch.Tensor:
     return out
 
 
+# Build training and test sequences
 train_input_action = build_sequence(action_history[:train_episode_num])
 train_input_state = build_sequence(states_history[:train_episode_num])
 test_input_action = build_sequence(action_history[train_episode_num:])
@@ -129,7 +131,7 @@ test_input_state = build_sequence(states_history[train_episode_num:])
 class LSTM(nn.Module):
     def __init__(self, stack_num=1) -> None:
         super().__init__()
-        # self.lstm = nn.LSTMCell(env.num_acts + env.num_obs, env.num_obs)
+        # Stacked LSTM
         self.stack_num = stack_num
         self.lstms = nn.ModuleList(
             [
@@ -140,7 +142,8 @@ class LSTM(nn.Module):
             ]
         )
 
-        # hidden layer translation
+        # Output layer
+        # This is mandatory because LSTMCell output ranges from [0,1]
         self.mlp = nn.Sequential(
             nn.Linear(env.num_obs, 128),
             nn.ReLU(),
@@ -191,9 +194,7 @@ if args.weight != "":
     print("weight loaded from {}".format(args.weight))
 
 criterion = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-train_epoch = 4000
-batch_size = 128
+optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
 if args.weight == "":
     training_loss_history = np.array([])
@@ -216,8 +217,8 @@ else:
     print("loss history loaded from {}".format(args.weight))
 
 fig = plotille.Figure()
-fig.width = 80
-fig.height = 30
+fig.width = os.get_terminal_size().columns - 23
+fig.height = os.get_terminal_size().lines - 6
 
 # Get normalizing factor by observation dimension
 obs_means = train_input_state.flatten(start_dim=0, end_dim=1).mean(0)
@@ -255,19 +256,6 @@ for i in tqdm(range(train_epoch)):
         optimizer.zero_grad()
         output = batch_state[:, 0, :]
 
-        x = (loss_mean - 0.7) * 5
-
-        # Teacher Forcing vs Scheduled Sampling
-        # prob = 1.0 / (1 + np.exp(-x)) # Sigmoid by loss_mean
-        prob = 0
-        if np.random.rand() < prob:
-            teacher_forcing = True
-        else:
-            teacher_forcing = False
-
-        # Scheduled BPTT Window length
-        # bptt_length = max(int(bptt_window * ( 1 - loss_mean * 2 )), 4)
-        # bptt_length = min(bptt_window, ((i//300) + 1) * 16)
         bptt_length = 128
         warmup_length = 64
 
@@ -330,20 +318,51 @@ for i in tqdm(range(train_epoch)):
                 else:
                     output = model(action, output.detach(), first=(k == 0))
                 output_history[:, k, :] = output
+
+            # Visualize
+            if not os.path.exists(model_path + "/video"):
+                os.makedirs(model_path + "/video")
+            env.start_video_recording(
+                os.path.abspath(model_path) + "/video/{}_ground_truth.mp4".format(i)
+            )
             print("Visualizing ground truth")
-            visualization_index = np.random.randint(test_episode_num * bptt_windows_per_episode)
+            print("model_path:", model_path)
+            visualization_index = np.random.randint(
+                test_episode_num * bptt_windows_per_episode
+            )
             for k in range(warmup_length - 1, test_window - 1):
                 env.set_observation(
-                    np.tile((test_input_state[visualization_index, k, :] * obs_stds + obs_means).cpu().numpy(), (env.num_envs, 1))
+                    np.tile(
+                        (
+                            test_input_state[visualization_index, k, :] * obs_stds
+                            + obs_means
+                        )
+                        .cpu()
+                        .numpy(),
+                        (env.num_envs, 1),
+                    )
                 )
                 time.sleep(time_step)
+            env.stop_video_recording()
+            env.start_video_recording(
+                os.path.abspath(model_path) + "/video/{}_prediction.mp4".format(i)
+            )
             print("Visualizing prediction")
             for k in range(warmup_length - 1, test_window - 1):
                 env.set_observation(
-                    np.tile((output_history[visualization_index, k, :] * obs_stds + obs_means).cpu().numpy(), (env.num_envs, 1))
+                    np.tile(
+                        (
+                            output_history[visualization_index, k, :] * obs_stds
+                            + obs_means
+                        )
+                        .cpu()
+                        .numpy(),
+                        (env.num_envs, 1),
+                    )
                 )
                 time.sleep(time_step)
-
+            env.stop_video_recording()
+            env.turn_off_visualization()
             loss = criterion(
                 output_history[:, warmup_length:, :],
                 test_input_state[:, warmup_length + 1 : test_window, :],
@@ -351,13 +370,20 @@ for i in tqdm(range(train_epoch)):
             test_loss_history_scheduled_sampling = np.append(
                 test_loss_history_scheduled_sampling, loss.item()
             )
-            env.turn_off_visualization()
-            env.start_video_recording
             if loss < min_loss:
                 min_loss = loss
-                # Delete old model if exist
-                if os.path.exists(model_path):
-                    shutil.rmtree(model_path)
+                # Delete all file with pt extension in model_path
+                for f in os.listdir(model_path):
+                    if f.endswith(".pt"):
+                        os.remove(os.path.join(model_path, f))
+                    if (
+                        f == "training_loss_history.npy"
+                        or f == "epoch_timestamp.npy"
+                        or f == "test_loss_history_teacher_forcing.npy"
+                        or f == "test_loss_history_scheduled_sampling.npy"
+                    ):
+                        os.remove(os.path.join(model_path, f))
+                # Create new model folder
                 os.makedirs(model_path, exist_ok=True)
                 # Save model
                 torch.save(

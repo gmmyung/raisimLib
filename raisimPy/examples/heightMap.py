@@ -3,7 +3,9 @@ import numpy as np
 import raisimpy as raisim
 import time
 
-raisim.World.setLicenseFile(os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim")
+raisim.World.setLicenseFile(
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim"
+)
 world = raisim.World()
 world.setTimeStep(0.001)
 
@@ -21,14 +23,37 @@ terrainProperties.fractalGain = 0.25
 hm = world.addHeightMap(0.0, 0.0, terrainProperties)
 
 # robot
-anymal_urdf_file = os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal/urdf/anymal.urdf"
+anymal_urdf_file = (
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal/urdf/anymal.urdf"
+)
 anymal = world.addArticulatedSystem(anymal_urdf_file)
 
 # ANYmal joint PD controller
-anymal_nominal_joint_config = np.array([0, -1.5, 2.54, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8,
-                                        -0.03, 0.4, -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8])
+anymal_nominal_joint_config = np.array(
+    [
+        0,
+        -1.5,
+        2.54,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.03,
+        0.4,
+        -0.8,
+        -0.03,
+        0.4,
+        -0.8,
+        0.03,
+        -0.4,
+        0.8,
+        -0.03,
+        -0.4,
+        0.8,
+    ]
+)
 anymal.setGeneralizedCoordinate(anymal_nominal_joint_config)
-anymal.setPdGains(200*np.ones([18]), np.ones([18]))
+anymal.setPdGains(200 * np.ones([18]), np.ones([18]))
 anymal.setPdTarget(anymal_nominal_joint_config, np.zeros([18]))
 
 # launch raisim server

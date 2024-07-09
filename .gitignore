@@ -28,3 +28,4 @@ raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/model
 raisimGymTorch/thirdParty/pybind11/.appveyor.yml
 raisimGymTorch/compile_commands.json
 raisimUnityOpengl/linux/Logs
+raisimUnity/linux/Screenshot

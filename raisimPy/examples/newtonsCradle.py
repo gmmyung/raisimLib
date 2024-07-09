@@ -5,7 +5,9 @@ import math
 import time
 
 
-raisim.World.setLicenseFile(os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim")
+raisim.World.setLicenseFile(
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim"
+)
 world = raisim.World()
 ground = world.addGround()
 world.setTimeStep(0.001)
@@ -37,20 +39,46 @@ pin5.setPosition(0.9, 0.0, 6.0)
 pin5.setBodyType(raisim.BodyType.STATIC)
 
 pin6 = world.addSphere(0.1, 0.8)
-pin6.setPosition(-3., 0.0, 7.0)
+pin6.setPosition(-3.0, 0.0, 7.0)
 pin6.setBodyType(raisim.BodyType.STATIC)
 
 pin7 = world.addSphere(0.1, 0.8)
-pin7.setPosition(-4., 0.0, 7.0)
+pin7.setPosition(-4.0, 0.0, 7.0)
 pin7.setBodyType(raisim.BodyType.STATIC)
 
-anymalB_urdf_file = os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal/urdf/anymal.urdf"
-anymalC_urdf_file = os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal_c/urdf/anymal.urdf"
+anymalB_urdf_file = (
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal/urdf/anymal.urdf"
+)
+anymalC_urdf_file = (
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/anymal_c/urdf/anymal.urdf"
+)
 
 anymalC = world.addArticulatedSystem(anymalC_urdf_file)
 anymalB = world.addArticulatedSystem(anymalB_urdf_file)
 
-jointNominalConfig = np.array([-3, 0, 4.54, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8, -0.03, 0.4, -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8])
+jointNominalConfig = np.array(
+    [
+        -3,
+        0,
+        4.54,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.03,
+        0.4,
+        -0.8,
+        -0.03,
+        0.4,
+        -0.8,
+        0.03,
+        -0.4,
+        0.8,
+        -0.03,
+        -0.4,
+        0.8,
+    ]
+)
 jointVelocityTarget = np.zeros([anymalC.getDOF()])
 jointPgain = np.ones(anymalC.getDOF()) * 100.0
 jointDgain = np.ones(anymalC.getDOF()) * 1.0
@@ -78,7 +106,7 @@ ball3.setPosition(0.6, 0.0, 1.0)
 ball4 = world.addSphere(0.1499, 0.8, "steel")
 ball4.setPosition(2.9, 0.0, 3.0)
 
-box = world.addBox(.1, .1, .1, 1)
+box = world.addBox(0.1, 0.1, 0.1, 1)
 box.setPosition(0.9, 0.0, 4.2)
 
 world.addStiffWire(pin1, 0, np.zeros(3), ball1, 0, np.zeros(3), 2.0)

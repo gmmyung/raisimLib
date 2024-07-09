@@ -5,8 +5,10 @@ import time
 import math
 
 
-raisim.World.setLicenseFile(os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim")
-world = raisim.World() 
+raisim.World.setLicenseFile(
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/activation.raisim"
+)
+world = raisim.World()
 world.setTimeStep(0.001)
 
 # create objects
@@ -23,7 +25,9 @@ terrainProperties.fractalGain = 0.25
 
 hm = world.addHeightMap(0.0, 0.0, terrainProperties)
 hm.setAppearance("soil1")
-robot = world.addArticulatedSystem(os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/husky/husky.urdf")
+robot = world.addArticulatedSystem(
+    os.path.dirname(os.path.abspath(__file__)) + "/../../rsc/husky/husky.urdf"
+)
 robot.setName("smb")
 robot.setGeneralizedCoordinate(np.array([0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0]))
 robot.setGeneralizedVelocity(np.zeros(10))
@@ -40,7 +44,9 @@ scanSize2 = 25
 # create visual boxes to visualize scan points
 for i in range(scanSize1):
     for j in range(scanSize2):
-        scans.append(server.addVisualBox("box" + str(i) + "/" + str(j), 0.3, 0.3, 0.3, 1, 0, 0))
+        scans.append(
+            server.addVisualBox("box" + str(i) + "/" + str(j), 0.3, 0.3, 0.3, 1, 0, 0)
+        )
 
 for i in range(10000000000):
     server.integrateWorldThreadSafe()
@@ -50,9 +56,12 @@ for i in range(10000000000):
     for i in range(scanSize1):
         for j in range(scanSize2):
             yaw = j * math.pi / scanSize2 * 0.6 - 0.3 * math.pi
-            pitch = -(i * 0.3/scanSize1) + 0.2
-            normInv = 1. / math.sqrt(pitch * pitch + 1)
-            direction = np.mat([np.cos(yaw) * normInv, np.sin(yaw) * normInv, -pitch * normInv], dtype=np.float64)
+            pitch = -(i * 0.3 / scanSize1) + 0.2
+            normInv = 1.0 / math.sqrt(pitch * pitch + 1)
+            direction = np.mat(
+                [np.cos(yaw) * normInv, np.sin(yaw) * normInv, -pitch * normInv],
+                dtype=np.float64,
+            )
             rayDirection = lidarOri.dot(direction.transpose())
             col = world.rayTest(lidarPos, rayDirection, 30)
             if col.size() > 0:
@@ -63,8 +72,7 @@ for i in range(10000000000):
     robot.setGeneralizedForce(np.array([0, 0, 0, 0, 0, 0, -20, -20, -20, -20]))
     gc = robot.getGeneralizedCoordinate()
 
-    if abs(gc[0]) > 35. or abs(gc[1]) > 35.:
+    if abs(gc[0]) > 35.0 or abs(gc[1]) > 35.0:
         robot.setGeneralizedCoordinate(np.array([0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0]))
 
 server.killServer()
-
