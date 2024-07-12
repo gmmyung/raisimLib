@@ -6,6 +6,7 @@
 #pragma once
 
 #include "../../RaisimGymEnv.hpp"
+#include "Eigen/src/Core/Matrix.h"
 #include <pybind11/pybind11.h>
 #include <set>
 #include <stdlib.h>
@@ -60,11 +61,12 @@ public:
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 35;
+    obDim_ = 47;
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
+    obs_body_pos_.setZero(3);
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
@@ -134,21 +136,16 @@ public:
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
 
-    obDouble_
-        << gc_[2], /// body height
-                   // rot.e().row(2).transpose(),      /// body orientation
+    obDouble_ << gc_[2],                 /// body height
         gc_.segment(3, 4),               /// body orientation quaternion
         gc_.tail(12),                    /// joint angles
         bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-        gv_.tail(12);                    /// joint velocity
-                                         //                                  //
-    //                                  anymal_->getGeneralizedForce().e();
-    // << gc_[2],
-    // rot.e().row(2).transpose(), gc_.tail(12), gv_.tail(12), bodyLinearVel_,
-    // bodyAngularVel_, gv_.tail(12);
+        gv_.tail(12),                    /// joint velocity
+        anymal_->getGeneralizedForce().e().tail(12); /// joint force
+    ;
   }
 
-  void setObservation(const Eigen::Ref<EigenVec> &ob) {
+  void setObservation(const Eigen::Ref<EigenVec> &ob, bool init) {
     // define zero matrix obs_gc
     obs_gc_ = Eigen::VectorXd::Zero(gcDim_);
     auto ob_double = ob.cast<double>();
@@ -158,7 +155,23 @@ public:
     obs_gc_.segment(3, 4) = ob_double.segment(1, 4);
     // copy joint angles
     obs_gc_.tail(12) = ob_double.segment(5, 12);
-
+    // increment body x, y coordinates
+    raisim::Vec<4> quat;
+    raisim::Mat<3, 3> rot;
+    quat[0] = obs_gc_[3];
+    quat[1] = obs_gc_[4];
+    quat[2] = obs_gc_[5];
+    quat[3] = obs_gc_[6];
+    raisim::quatToRotMat(quat / quat.norm(), rot);
+    Eigen::Vector3d bodyLinearVel = rot.e() * ob_double.segment(17, 3);
+    if (init) {
+      obs_body_pos_ = Eigen::Vector3d(0, 0, 0);
+    } else {
+      obs_body_pos_[0] += bodyLinearVel[0] * control_dt_;
+      obs_body_pos_[1] += bodyLinearVel[1] * control_dt_;
+    }
+    obs_gc_[0] = obs_body_pos_[0];
+    obs_gc_[1] = obs_body_pos_[1];
     // set gv to zero
     obs_gv_ = Eigen::VectorXd::Zero(gvDim_);
 
@@ -190,7 +203,7 @@ private:
   bool visualizable_ = false;
   raisim::ArticulatedSystem *anymal_;
   Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
-  Eigen::VectorXd obs_gc_, obs_gv_;
+  Eigen::VectorXd obs_gc_, obs_gv_, obs_body_pos_;
   double terminalRewardCoeff_ = -10.;
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;

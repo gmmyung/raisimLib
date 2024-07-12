@@ -19,7 +19,7 @@ import shutil
 episode_num = 5000
 episode_len = 200
 bptt_window = 128
-bptt_step = 5
+bptt_step = 10
 test_ratio = 0.2
 train_epoch = 4000
 batch_size = 128
@@ -72,7 +72,7 @@ time_step = cfg["environment"]["control_dt"]
 # World Rollout
 for j in tqdm(range(episode_num // env.num_envs + 1)):
     env.reset()
-    if j % 1 == 0:
+    if j == 0:
         visualize = True
         env.turn_on_visualization()
     actions = random_action(env.num_envs, episode_len, env.num_acts)
@@ -85,6 +85,8 @@ for j in tqdm(range(episode_num // env.num_envs + 1)):
         end = time.time()
         if visualize:
             time.sleep(max(0, time_step - (end - start)))
+        if np.isnan(states[0, :]).any():
+            print(states[0, :])
     visualize = False
     env.turn_off_visualization()
     start_idx = j * env.num_envs
@@ -174,12 +176,11 @@ class LSTM(nn.Module):
                 self.hidden_state[i], self.cell_state[i] = lstm(
                     self.hidden_state[i - 1], (self.hidden_state[i], self.cell_state[i])
                 )
-
         return self.mlp(self.hidden_state[-1])
 
 
 # Train RNN model
-model = LSTM(stack_num=1)
+model = LSTM(stack_num=5)
 
 # Load model if path is given
 if args.weight != "":
@@ -318,6 +319,13 @@ for i in tqdm(range(train_epoch)):
                 else:
                     output = model(action, output.detach(), first=(k == 0))
                 output_history[:, k, :] = output
+            loss = criterion(
+                output_history[:, warmup_length:, :],
+                test_input_state[:, warmup_length + 1 : test_window, :],
+            )
+            test_loss_history_scheduled_sampling = np.append(
+                test_loss_history_scheduled_sampling, loss.item()
+            )
 
             # Visualize
             if not os.path.exists(model_path + "/video"):
@@ -340,7 +348,8 @@ for i in tqdm(range(train_epoch)):
                         .cpu()
                         .numpy(),
                         (env.num_envs, 1),
-                    )
+                    ),
+                    initialize=(k == warmup_length - 1),
                 )
                 time.sleep(time_step)
             env.stop_video_recording()
@@ -358,18 +367,12 @@ for i in tqdm(range(train_epoch)):
                         .cpu()
                         .numpy(),
                         (env.num_envs, 1),
-                    )
+                    ),
+                    initialize=(k == warmup_length - 1),
                 )
                 time.sleep(time_step)
             env.stop_video_recording()
             env.turn_off_visualization()
-            loss = criterion(
-                output_history[:, warmup_length:, :],
-                test_input_state[:, warmup_length + 1 : test_window, :],
-            )
-            test_loss_history_scheduled_sampling = np.append(
-                test_loss_history_scheduled_sampling, loss.item()
-            )
             if loss < min_loss:
                 min_loss = loss
                 # Delete all file with pt extension in model_path
@@ -430,3 +433,5 @@ for i in tqdm(range(train_epoch)):
     fig.set_x_limits(min_=0, max_=epoch_timestamp[-1])
     os.system("clear")
     print(fig.show(legend=True))
+
+# Generate action by gr

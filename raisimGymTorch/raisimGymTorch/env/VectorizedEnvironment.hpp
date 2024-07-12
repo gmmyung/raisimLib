@@ -116,10 +116,10 @@ public:
     if (render_)
       environments_[0]->stopRecordingVideo();
   }
-  void setObservation(Eigen::Ref<EigenRowMajorMat> &obs) {
+  void setObservation(Eigen::Ref<EigenRowMajorMat> &obs, bool initialize) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++) {
-      environments_[i]->setObservation(obs.row(i));
+      environments_[i]->setObservation(obs.row(i), initialize);
     }
   }
   void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var,

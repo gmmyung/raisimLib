@@ -79,8 +79,8 @@ class RaisimGymVecEnv:
     def curriculum_callback(self):
         self.wrapper.curriculumUpdate()
 
-    def set_observation(self, obs):
-        self.wrapper.setObservation(obs)
+    def set_observation(self, obs, initialize: bool = False):
+        self.wrapper.setObservation(obs, initialize)
 
     @property
     def num_envs(self):
