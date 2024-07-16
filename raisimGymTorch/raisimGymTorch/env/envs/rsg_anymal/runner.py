@@ -1,4 +1,5 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
+from ruamel.yaml.compat import StringIO
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
 from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
 from raisimGymTorch.env.bin.rsg_anymal import NormalSampler
@@ -36,10 +37,12 @@ home_path = task_path + "/../../../../.."
 
 # config
 cfg = YAML().load(open(task_path + "/cfg.yaml", 'r'))
+string_io = StringIO()
+YAML().dump(cfg["environment"], string_io)
 
 # create environment from the configuration file
-env = VecEnv(RaisimGymEnv(home_path + "/rsc", dump(cfg['environment'], Dumper=RoundTripDumper)))
-env.seed(cfg['seed'])
+env = VecEnv(RaisimGymEnv(home_path + "/rsc", string_io.getvalue()))
+env.seed(cfg["seed"])
 
 # shortcuts
 ob_dim = env.num_obs
