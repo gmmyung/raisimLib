@@ -3,4 +3,4 @@
 	url = https://github.com/pybind/pybind11.git
 [submodule "raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2"]
 	path = raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2
-	url = https://github.com/nicklashansen/tdmpc2.git
+	url = https://github.com/gmmyung/tdmpc2.git
