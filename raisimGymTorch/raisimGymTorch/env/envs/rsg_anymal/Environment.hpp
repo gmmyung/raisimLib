@@ -8,6 +8,7 @@
 #include "../../RaisimGymEnv.hpp"
 #include "Eigen/src/Core/Matrix.h"
 #include <pybind11/pybind11.h>
+#include <raisim/contact/Contact.hpp>
 #include <set>
 #include <stdlib.h>
 
@@ -61,7 +62,7 @@ public:
     anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 47;
+    obDim_ = 48;
     actionDim_ = nJoints_;
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
@@ -135,14 +136,22 @@ public:
     raisim::quatToRotMat(quat, rot);
     bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
     bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
+    double body_contact = 0.0;
+
+    for (auto &contact : anymal_->getContacts()) {
+      if (footIndices_.find(contact.getlocalBodyIndex()) ==
+          footIndices_.end()) {
+        body_contact = 1.0;
+      }
+    }
 
     obDouble_ << gc_[2],                 /// body height
         gc_.segment(3, 4),               /// body orientation quaternion
         gc_.tail(12),                    /// joint angles
         bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
         gv_.tail(12),                    /// joint velocity
-        anymal_->getGeneralizedForce().e().tail(12); /// joint force
-    ;
+        anymal_->getGeneralizedForce().e().tail(12), /// joint force
+        body_contact;                                /// body contact
   }
 
   void setObservation(const Eigen::Ref<EigenVec> &ob, bool init) {

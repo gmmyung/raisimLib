@@ -21,7 +21,7 @@ episode_len = 200
 bptt_window = 128
 bptt_step = 10
 test_ratio = 0.2
-train_epoch = 4000
+train_epoch = 1000 
 batch_size = 128
 learning_rate = 0.001
 
@@ -154,18 +154,22 @@ class LSTM(nn.Module):
             nn.Linear(128, env.num_obs),
         )
 
+        self.hidden_state = [
+            torch.zeros(512, env.num_obs) for _ in range(stack_num)
+        ]
+        self.cell_state = [
+            torch.zeros(512, env.num_obs) for _ in range(stack_num)
+        ]
+
     def forward(
         self, action: torch.Tensor, state: torch.Tensor, first: bool = False
     ) -> torch.Tensor:
         batch_size = state.shape[0]
         x = torch.cat((state, action), 1)
         if first:
-            self.hidden_state = [
-                torch.zeros(batch_size, env.num_obs) for _ in range(self.stack_num)
-            ]
-            self.cell_state = [
-                torch.zeros(batch_size, env.num_obs) for _ in range(self.stack_num)
-            ]
+            for i in range(self.stack_num):
+                self.hidden_state[i] = torch.zeros(batch_size, env.num_obs)
+                self.cell_state[i] = torch.zeros(batch_size, env.num_obs)
             self.hidden_state[-1] = state
         for i, lstm in enumerate(self.lstms):
             if i == 0:
@@ -178,6 +182,10 @@ class LSTM(nn.Module):
                 )
         return self.mlp(self.hidden_state[-1])
 
+    def deepcopy(self):
+        new_model = LSTM(stack_num=self.stack_num)
+        new_model.load_state_dict(self.state_dict())
+        return new_model
 
 # Train RNN model
 model = LSTM(stack_num=5)
@@ -219,7 +227,7 @@ else:
 
 fig = plotille.Figure()
 fig.width = os.get_terminal_size().columns - 23
-fig.height = os.get_terminal_size().lines - 6
+fig.height = os.get_terminal_size().lines - 12
 
 # Get normalizing factor by observation dimension
 obs_means = train_input_state.flatten(start_dim=0, end_dim=1).mean(0)
@@ -434,4 +442,100 @@ for i in tqdm(range(train_epoch)):
     os.system("clear")
     print(fig.show(legend=True))
 
-# Generate action by gr
+env.turn_on_visualization()
+env.reset()
+# model warmup with test data
+for i in range(32):
+    action = test_input_action[0, i, :].tile(512, 1)
+    env.step(action.cpu().numpy().astype(np.float32))
+    obs = (torch.Tensor(env.observe(False)[0, :]).to(device) - obs_means) / obs_stds
+    output = model(action, obs.tile(512, 1).detach(), first=(i == 0))
+
+print("model warmup done")
+
+state_replay = np.zeros((400, env.num_obs))
+
+for i in range(200):
+    # generate random action
+    actions = torch.Tensor(random_action(512, 64, env.num_acts)).to(device)
+    if i != 0:
+        actions.requires_grad = False
+        print(actions[top_k_action, 1:64, :].shape)
+        actions[0:top_k_action.shape[0] * 16, 0:63, :] = actions[top_k_action, 1:64, :].repeat(16,1, 1)
+        # actions[top_k_action, 63, :] = torch.rand(
+        #     512, env.num_acts, dtype=torch.float32, device=device
+        # )
+        actions[0:top_k_action.shape[0] * 16, 0:63, :] += torch.normal(
+            torch.zeros(top_k_action.shape[0] * 16, 63, env.num_acts, dtype=torch.float32, device=device),
+            torch.ones(top_k_action.shape[0] * 16, 63, env.num_acts, dtype=torch.float32, device=device) * 0.05,
+        )
+        # actions += torch.normal(
+        #     torch.zeros(512, 64, env.num_acts, dtype=torch.float32, device=device),
+        #     torch.ones(512, 64, env.num_acts, dtype=torch.float32, device=device) * 0.1,
+        # )
+
+    actions.requires_grad = True
+    # step on world model 64 times
+
+    # Optimize action
+    optimizer = torch.optim.Adam([actions], lr=0.005)
+    output_history = [torch.zeros(512, env.num_obs) for _ in range(64)]
+    print("optimizing")
+    for j in tqdm(range(4)):
+        optimizer.zero_grad()
+        rollout_model = model.deepcopy() 
+        for k in range(64):
+            output = rollout_model(actions[:, k, :], output.detach())
+            output_history[k] = output
+        # loss is sum of forward velocity
+        loss = 0
+        for k in range(64):
+            # if k >= 16:
+            loss += torch.sum((output_history[k][:, 17] * obs_stds[17] + obs_means[17] -5).pow(2) )
+            loss += torch.sum(2 * (output_history[k][:,47] * obs_stds[47] + obs_means[47]))
+            loss += torch.sum(output_history[k][:, 20:23].norm(dim=1))
+
+        loss.backward()
+        optimizer.step()
+
+    # visualize
+    # action is mean of top 10 action sequence
+    output_history = torch.stack(output_history, dim=1)
+
+    loss_per_episode = torch.zeros(512, dtype=torch.float32, device=device)
+    loss_per_episode += torch.sum((output_history[:, :, 17] * obs_stds[17] + obs_means[17] - 5).pow(2), dim=1)
+    loss_per_episode += torch.sum(2 * (output_history[:, :, 47] * obs_stds[47] + obs_means[47]), dim=1)
+    loss_per_episode += torch.sum(output_history[:, :, 20:23].norm(dim=2), dim=1)
+
+    top_k_action = torch.topk(-loss_per_episode, 16, dim=0).indices
+    top_action = torch.max(-loss_per_episode, dim=0).indices
+
+    # mean of top 10 action sequence
+    # action = torch.mean(actions[top_k_action, :, :], dim=0).tile(512, 1, 1)
+    action = actions[top_action, :, :].tile(512, 1, 1)
+    for k in range(2):
+        env.step(action[0, k, :].tile(env.num_envs, 1).cpu().detach().numpy().astype(np.float32))
+        state = (torch.Tensor(env.observe(False)[0, :]).to(device) - obs_means) / obs_stds
+        model(action[:, k, :], torch.Tensor(state).to(device).tile(512, 1).detach())
+        print("forward velocity", state[17] * obs_stds[17] + obs_means[17])
+        print("contact", state[47] * obs_stds[47] + obs_means[47])
+
+        state_replay[i * 2 + k, :] = state.cpu().detach().numpy()
+
+if not os.path.exists(model_path + "/video"):
+    os.makedirs(model_path + "/video")
+env.start_video_recording(
+    os.path.abspath(model_path) + "/video/replay.mp4"
+)
+
+env.reset()
+print("Visualizing replay")
+for k in range(400):
+    env.set_observation(np.tile(state_replay[k, :] * obs_stds.cpu().numpy() + obs_means.cpu().numpy(), (env.num_envs, 1)).astype(np.float32), initialize=(k == 0))
+    time.sleep(time_step)
+# save replay
+np.save(model_path + "/state_replay.npy", state_replay)
+np.save(model_path + "/obs_means.npy", obs_means.cpu().numpy())
+np.save(model_path + "/obs_stds.npy", obs_stds.cpu().numpy())
+env.stop_video_recording()
+env.turn_off_visualization()
