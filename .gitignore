@@ -21,3 +21,9 @@ examples/cmake-build*/*
 **/activation.raisim
 data/*
 **/.DS_Store
+.cache/clangd/index
+raisimGymTorch/.cache/clangd/index
+raisimGymTorch/.venv
+raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/model
+raisimGymTorch/compile_commands.json
+raisimUnity/linux/Screenshot
