@@ -1,3 +1,6 @@
 [submodule "raisimGymTorch/thirdParty/pybind11"]
 	path = raisimGymTorch/thirdParty/pybind11
 	url = https://github.com/pybind/pybind11.git
+[submodule "raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2"]
+	path = raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2
+	url = https://github.com/nicklashansen/tdmpc2.git
