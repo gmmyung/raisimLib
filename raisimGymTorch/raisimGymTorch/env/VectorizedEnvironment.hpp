@@ -59,6 +59,9 @@ class VectorizedEnvironment {
     obDim_ = environments_[0]->getObDim();
     actionDim_ = environments_[0]->getActionDim();
     RSFATAL_IF(obDim_ == 0 || actionDim_ == 0, "Observation/Action dimension must be defined in the constructor of each environment!")
+    
+    /// whether environment is reset when done
+    reset_when_done_ = cfg_["reset_when_done"].template As<bool>();
 
     /// ob scaling
     if (normalizeObservation_) {
@@ -100,6 +103,7 @@ class VectorizedEnvironment {
   void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
   void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }
   void stopRecordingVideo() { if(render_) environments_[0]->stopRecordingVideo(); }
+  void requestScreenShot() { if(render_) environments_[0]->requestScreenShot(); }
   void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count) {
     mean = obMean_; var = obVar_; count = obCount_; }
   void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float count) {
@@ -179,7 +183,7 @@ class VectorizedEnvironment {
     float terminalReward = 0;
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
 
-    if (done[agentId]) {
+    if (done[agentId] && reset_when_done_) {
       environments_[agentId]->reset();
       reward[agentId] += terminalReward;
     }
@@ -201,6 +205,7 @@ class VectorizedEnvironment {
   EigenVec obVar_;
   float obCount_ = 1e-4;
   EigenVec recentMean_, recentVar_, delta_;
+  bool reset_when_done_ = true;
   EigenVec epsilon;
 };
 

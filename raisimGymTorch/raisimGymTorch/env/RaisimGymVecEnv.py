@@ -38,6 +38,9 @@ class RaisimGymVecEnv:
     def turn_off_visualization(self):
         self.wrapper.turnOffVisualization()
 
+    def request_screenshot(self):
+        self.wrapper.requestScreenShot()
+
     def start_video_recording(self, file_name):
         self.wrapper.startRecordingVideo(file_name)
 
