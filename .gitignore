@@ -27,3 +27,4 @@ raisimGymTorch/.venv
 raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/model
 raisimGymTorch/compile_commands.json
 raisimUnity/linux/Screenshot
+raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/wandb

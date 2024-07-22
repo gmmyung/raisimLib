@@ -1,7 +1,7 @@
 from ruamel.yaml import YAML, dump, RoundTripDumper
 from ruamel.yaml.compat import StringIO
 from raisimGymTorch.env.RaisimGymVecEnv import RaisimGymVecEnv as VecEnv
-from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param, tensorboard_launcher
+from raisimGymTorch.helper.raisim_gym_helper import ConfigurationSaver, load_param# , tensorboard_launcher
 from raisimGymTorch.env.bin.rsg_anymal import NormalSampler
 from raisimGymTorch.env.bin.rsg_anymal import RaisimGymEnv
 from raisimGymTorch.env.RewardAnalyzer import RewardAnalyzer
@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import datetime
 import argparse
-
+import wandb
 
 # task specification
 task_name = "anymal_locomotion"
@@ -44,6 +44,13 @@ YAML().dump(cfg["environment"], string_io)
 env = VecEnv(RaisimGymEnv(home_path + "/rsc", string_io.getvalue()))
 env.seed(cfg["seed"])
 
+# configure wandb
+wandb.init(project="ppo_baseline", config={
+    "task": task_name,
+    "mode": mode,
+    "weight": weight_path
+})
+
 # shortcuts
 ob_dim = env.num_obs
 act_dim = env.num_acts
@@ -67,7 +74,9 @@ critic = ppo_module.Critic(ppo_module.MLP(cfg['architecture']['value_net'], nn.L
 
 saver = ConfigurationSaver(log_dir=home_path + "/raisimGymTorch/data/"+task_name,
                            save_items=[task_path + "/cfg.yaml", task_path + "/Environment.hpp"])
-tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+# tensorboard_launcher(saver.data_dir+"/..")  # press refresh (F5) after the first ppo update
+
+
 
 ppo = PPO.PPO(actor=actor,
               critic=critic,
@@ -86,6 +95,8 @@ reward_analyzer = RewardAnalyzer(env, ppo.writer)
 
 if mode == 'retrain':
     load_param(weight_path, env, actor, critic, ppo.optimizer, saver.data_dir)
+
+training_step = 0
 
 for update in range(1000000):
     start = time.time()
@@ -137,6 +148,8 @@ for update in range(1000000):
         done_sum = done_sum + np.sum(dones)
         reward_sum = reward_sum + np.sum(reward)
 
+    training_step = training_step + n_steps * env.num_envs
+
     # take st step to get value obs
     obs = env.observe()
     ppo.update(actor_obs=obs, value_obs=obs, log_this_iteration=update % 10 == 0, update=update)
@@ -151,6 +164,14 @@ for update in range(1000000):
     env.curriculum_callback()
 
     end = time.time()
+
+    wandb.log({"average ll reward": average_ll_performance,
+               "training_reward": average_ll_performance * n_steps,
+               "dones": average_dones,
+               "time elapsed in this iteration": end - start,
+               "fps": total_steps / (end - start),
+               "training_step": training_step,
+               "real time factor": total_steps / (end - start) * cfg['environment']['control_dt']})
 
     print('----------------------------------------------------')
     print('{:>6}th iteration'.format(update))
