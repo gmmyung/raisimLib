@@ -3,8 +3,8 @@ record_video: yes
 
 environment:
   render: True
-  num_envs: 100
-  eval_every_n: 200
+  num_envs: 1
+  eval_every_n: 1 
   num_threads: 30
   simulation_dt: 0.0025
   control_dt: 0.02
@@ -17,6 +17,8 @@ environment:
       coeff: -4e-5
   p_gain: 50.0
   d_gain: 0.2
+  port: 8082
+  urdf_path: /anymal/urdf/anymal_depth_sensor.urdf
 
 architecture:
   policy_net: [128, 128]

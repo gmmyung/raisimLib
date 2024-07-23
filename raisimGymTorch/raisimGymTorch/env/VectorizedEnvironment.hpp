@@ -7,34 +7,34 @@
 #define SRC_RAISIMGYMVECENV_HPP
 
 #include "RaisimGymEnv.hpp"
-#include "omp.h"
 #include "Yaml.hpp"
+#include "omp.h"
 
 namespace raisim {
 
 int THREAD_COUNT;
 
-template<class ChildEnvironment>
-class VectorizedEnvironment {
+template <class ChildEnvironment> class VectorizedEnvironment {
 
- public:
-
-  explicit VectorizedEnvironment(std::string resourceDir, std::string cfg, bool normalizeObservation=true)
-      : resourceDir_(resourceDir), cfgString_(cfg), normalizeObservation_(normalizeObservation) {
+public:
+  explicit VectorizedEnvironment(std::string resourceDir, std::string cfg,
+                                 bool normalizeObservation = true)
+      : resourceDir_(resourceDir), cfgString_(cfg),
+        normalizeObservation_(normalizeObservation) {
     Yaml::Parse(cfg_, cfg);
 
-    if(&cfg_["render"])
+    if (&cfg_["render"])
       render_ = cfg_["render"].template As<bool>();
     init();
   }
 
   ~VectorizedEnvironment() {
-    for (auto *ptr: environments_)
+    for (auto *ptr : environments_)
       delete ptr;
   }
 
-  const std::string& getResourceDir() const { return resourceDir_; }
-  const std::string& getCfgString() const { return cfgString_; }
+  const std::string &getResourceDir() const { return resourceDir_; }
+  const std::string &getCfgString() const { return cfgString_; }
 
   void init() {
     THREAD_COUNT = cfg_["num_threads"].template As<int>();
@@ -44,10 +44,14 @@ class VectorizedEnvironment {
     environments_.reserve(num_envs_);
     rewardInformation_.reserve(num_envs_);
     for (int i = 0; i < num_envs_; i++) {
-      environments_.push_back(new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0));
-      environments_.back()->setSimulationTimeStep(cfg_["simulation_dt"].template As<double>());
-      environments_.back()->setControlTimeStep(cfg_["control_dt"].template As<double>());
-      rewardInformation_.push_back(environments_.back()->getRewards().getStdMap());
+      environments_.push_back(
+          new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0));
+      environments_.back()->setSimulationTimeStep(
+          cfg_["simulation_dt"].template As<double>());
+      environments_.back()->setControlTimeStep(
+          cfg_["control_dt"].template As<double>());
+      rewardInformation_.push_back(
+          environments_.back()->getRewards().getStdMap());
     }
 
     for (int i = 0; i < num_envs_; i++) {
@@ -58,8 +62,10 @@ class VectorizedEnvironment {
 
     obDim_ = environments_[0]->getObDim();
     actionDim_ = environments_[0]->getActionDim();
-    RSFATAL_IF(obDim_ == 0 || actionDim_ == 0, "Observation/Action dimension must be defined in the constructor of each environment!")
-    
+    RSFATAL_IF(obDim_ == 0 || actionDim_ == 0,
+               "Observation/Action dimension must be defined in the "
+               "constructor of each environment!")
+
     /// whether environment is reset when done
     reset_when_done_ = cfg_["reset_when_done"].template As<bool>();
 
@@ -77,7 +83,7 @@ class VectorizedEnvironment {
 
   // resets all environments and returns observation
   void reset() {
-    for (auto env: environments_)
+    for (auto env : environments_)
       env->reset();
   }
 
@@ -90,39 +96,66 @@ class VectorizedEnvironment {
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
+  void depthImage(std::vector<Eigen::Ref<EigenRowMajorMat>> &image) {
+#pragma omp parallel for schedule(auto)
+    for (int i = 0; i < num_envs_; i++)
+      environments_[i]->depthImage(image[i]);
+  }
 
-  void step(Eigen::Ref<EigenRowMajorMat> &action,
-            Eigen::Ref<EigenVec> &reward,
+  void step(Eigen::Ref<EigenRowMajorMat> &action, Eigen::Ref<EigenVec> &reward,
             Eigen::Ref<EigenBoolVec> &done) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++)
       perAgentStep(i, action, reward, done);
   }
 
-  void turnOnVisualization() { if(render_) environments_[0]->turnOnVisualization(); }
-  void turnOffVisualization() { if(render_) environments_[0]->turnOffVisualization(); }
-  void startRecordingVideo(const std::string& videoName) { if(render_) environments_[0]->startRecordingVideo(videoName); }
-  void stopRecordingVideo() { if(render_) environments_[0]->stopRecordingVideo(); }
-  void requestScreenShot() { if(render_) environments_[0]->requestScreenShot(); }
-  void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float &count) {
-    mean = obMean_; var = obVar_; count = obCount_; }
-  void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var, float count) {
-    obMean_ = mean; obVar_ = var; obCount_ = count; }
+  void turnOnVisualization() {
+    if (render_)
+      environments_[0]->turnOnVisualization();
+  }
+  void turnOffVisualization() {
+    if (render_)
+      environments_[0]->turnOffVisualization();
+  }
+  void startRecordingVideo(const std::string &videoName) {
+    if (render_)
+      environments_[0]->startRecordingVideo(videoName);
+  }
+  void stopRecordingVideo() {
+    if (render_)
+      environments_[0]->stopRecordingVideo();
+  }
+  void requestScreenShot() {
+    if (render_)
+      environments_[0]->requestScreenShot();
+  }
+  void getObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var,
+                       float &count) {
+    mean = obMean_;
+    var = obVar_;
+    count = obCount_;
+  }
+  void setObStatistics(Eigen::Ref<EigenVec> &mean, Eigen::Ref<EigenVec> &var,
+                       float count) {
+    obMean_ = mean;
+    obVar_ = var;
+    obCount_ = count;
+  }
 
   void setSeed(int seed) {
     int seed_inc = seed;
 
-    #pragma omp parallel for schedule(auto)
-    for(int i=0; i<num_envs_; i++)
+#pragma omp parallel for schedule(auto)
+    for (int i = 0; i < num_envs_; i++)
       environments_[i]->setSeed(seed_inc++);
   }
 
   void close() {
-    for (auto *env: environments_)
+    for (auto *env : environments_)
       env->close();
   }
 
-  void isTerminalState(Eigen::Ref<EigenBoolVec>& terminalState) {
+  void isTerminalState(Eigen::Ref<EigenBoolVec> &terminalState) {
     for (int i = 0; i < num_envs_; i++) {
       float terminalReward;
       terminalState[i] = environments_[i]->isTerminalState(terminalReward);
@@ -130,12 +163,12 @@ class VectorizedEnvironment {
   }
 
   void setSimulationTimeStep(double dt) {
-    for (auto *env: environments_)
+    for (auto *env : environments_)
       env->setSimulationTimeStep(dt);
   }
 
   void setControlTimeStep(double dt) {
-    for (auto *env: environments_)
+    for (auto *env : environments_)
       env->setControlTimeStep(dt);
   }
 
@@ -145,40 +178,50 @@ class VectorizedEnvironment {
 
   ////// optional methods //////
   void curriculumUpdate() {
-    for (auto *env: environments_)
+    for (auto *env : environments_)
       env->curriculumUpdate();
   };
 
-  const std::vector<std::map<std::string, float>>& getRewardInfo() { return rewardInformation_; }
+  const std::vector<std::map<std::string, float>> &getRewardInfo() {
+    return rewardInformation_;
+  }
 
- private:
-  void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob, bool updateStatistics) {
+private:
+  void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,
+                                               bool updateStatistics) {
     if (updateStatistics) {
       recentMean_ = ob.colwise().mean();
-      recentVar_ = (ob.rowwise() - recentMean_.transpose()).colwise().squaredNorm() / num_envs_;
+      recentVar_ =
+          (ob.rowwise() - recentMean_.transpose()).colwise().squaredNorm() /
+          num_envs_;
 
       delta_ = obMean_ - recentMean_;
-      for(int i=0; i<obDim_; i++)
-        delta_[i] = delta_[i]*delta_[i];
+      for (int i = 0; i < obDim_; i++)
+        delta_[i] = delta_[i] * delta_[i];
 
       float totCount = obCount_ + num_envs_;
 
-      obMean_ = obMean_ * (obCount_ / totCount) + recentMean_ * (num_envs_ / totCount);
-      obVar_ = (obVar_ * obCount_ + recentVar_ * num_envs_ + delta_ * (obCount_ * num_envs_ / totCount)) / (totCount);
+      obMean_ = obMean_ * (obCount_ / totCount) +
+                recentMean_ * (num_envs_ / totCount);
+      obVar_ = (obVar_ * obCount_ + recentVar_ * num_envs_ +
+                delta_ * (obCount_ * num_envs_ / totCount)) /
+               (totCount);
       obCount_ = totCount;
     }
 
 #pragma omp parallel for schedule(auto)
-    for(int i=0; i<num_envs_; i++)
-      ob.row(i) = (ob.row(i) - obMean_.transpose()).template cwiseQuotient<>((obVar_ + epsilon).cwiseSqrt().transpose());
+    for (int i = 0; i < num_envs_; i++)
+      ob.row(i) = (ob.row(i) - obMean_.transpose())
+                      .template cwiseQuotient<>(
+                          (obVar_ + epsilon).cwiseSqrt().transpose());
   }
 
-  inline void perAgentStep(int agentId,
-                           Eigen::Ref<EigenRowMajorMat> &action,
+  inline void perAgentStep(int agentId, Eigen::Ref<EigenRowMajorMat> &action,
                            Eigen::Ref<EigenVec> &reward,
                            Eigen::Ref<EigenBoolVec> &done) {
     reward[agentId] = environments_[agentId]->step(action.row(agentId));
-    rewardInformation_[agentId] = environments_[agentId]->getRewards().getStdMap();
+    rewardInformation_[agentId] =
+        environments_[agentId]->getRewards().getStdMap();
 
     float terminalReward = 0;
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
@@ -194,7 +237,7 @@ class VectorizedEnvironment {
 
   int num_envs_ = 1;
   int obDim_ = 0, actionDim_ = 0;
-  bool recordVideo_=false, render_=false;
+  bool recordVideo_ = false, render_ = false;
   std::string resourceDir_;
   Yaml::Node cfg_;
   std::string cfgString_;
@@ -209,23 +252,21 @@ class VectorizedEnvironment {
   EigenVec epsilon;
 };
 
-
 class NormalDistribution {
- public:
+public:
   NormalDistribution() : normDist_(0.f, 1.f) {}
 
   float sample() { return normDist_(gen_); }
   void seed(int i) { gen_.seed(i); }
 
- private:
+private:
   std::normal_distribution<float> normDist_;
   static thread_local std::mt19937 gen_;
 };
 thread_local std::mt19937 raisim::NormalDistribution::gen_;
 
-
 class NormalSampler {
- public:
+public:
   NormalSampler(int dim) {
     dim_ = dim;
     normal_.resize(THREAD_COUNT);
@@ -260,6 +301,6 @@ class NormalSampler {
   std::vector<NormalDistribution> normal_;
 };
 
-}
+} // namespace raisim
 
-#endif //SRC_RAISIMGYMVECENV_HPP
+#endif // SRC_RAISIMGYMVECENV_HPP

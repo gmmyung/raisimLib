@@ -23,6 +23,7 @@ class RaisimGymVecEnv:
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
+        self._depth = np.zeros((self.num_envs, 64, 64), dtype=np.float32)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
         self.count = 0.0
@@ -69,6 +70,10 @@ class RaisimGymVecEnv:
     def observe(self, update_statistics=True):
         self.wrapper.observe(self._observation, update_statistics)
         return self._observation
+
+    def depth_image(self):
+        self.wrapper.depthImage(self._depth)
+        return self._depth
 
     def get_reward_info(self):
         return self.wrapper.getRewardInfo()

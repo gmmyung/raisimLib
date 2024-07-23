@@ -6,6 +6,7 @@
 #define _RAISIM_GYM_TORCH_RAISIMGYMTORCH_ENV_REWARD_HPP_
 
 #include "Yaml.hpp"
+#include "raisim/World.hpp"
 #include <initializer_list>
 #include <map>
 #include <string>

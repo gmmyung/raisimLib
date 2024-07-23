@@ -23,8 +23,9 @@ public:
     world_ = std::make_unique<raisim::World>();
 
     /// add objects
-    anymal_ =
-        world_->addArticulatedSystem(resourceDir_ + "/anymal/urdf/anymal.urdf");
+    std::string urdfPath;
+    READ_YAML(std::string, urdfPath, cfg["urdf_path"]);
+    anymal_ = world_->addArticulatedSystem(resourceDir_ + urdfPath);
     anymal_->setName("anymal");
     anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
     world_->addGround();
@@ -67,6 +68,11 @@ public:
     actionMean_.setZero(actionDim_);
     actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
+
+    depthSensor_ = anymal_->getSensorSet("depth_camera")
+                       ->getSensor<raisim::DepthCamera>("depth");
+    depthSensor_->setMeasurementSource(
+        raisim::Sensor::MeasurementSource::RAISIM);
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
@@ -160,6 +166,12 @@ public:
     return false;
   }
 
+  void depthImage(Eigen::Ref<EigenRowMajorMat> image) final {
+    depthSensor_->update(*world_);
+    std::vector<float> im = depthSensor_->getDepthArray();
+    image = Eigen::Map<Eigen::MatrixXf>(im.data(), 64, 64);
+  }
+
   void curriculumUpdate() {};
 
 private:
@@ -171,6 +183,7 @@ private:
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
+  raisim::DepthCamera *depthSensor_;
 
   /// these variables are not in use. They are placed to show you how to create
   /// a random number sampler.
