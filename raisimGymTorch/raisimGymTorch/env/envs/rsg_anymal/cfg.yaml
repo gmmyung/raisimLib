@@ -17,7 +17,7 @@ environment:
       coeff: -4e-5
   p_gain: 50.0
   d_gain: 0.2
-  port: 8082
+  server_port: 8080
   urdf_path: /anymal/urdf/anymal_depth_sensor.urdf
 
 architecture:

@@ -6,6 +6,7 @@
 #pragma once
 
 #include "../../RaisimGymEnv.hpp"
+#include "../DreamTeam.hpp"
 #include <set>
 #include <stdlib.h>
 
@@ -17,7 +18,8 @@ public:
   explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg,
                        bool visualizable)
       : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable),
-        normDist_(0, 1) {
+        normDist_(0, 1),
+        obstacleCourse_(100.0, 4.0, 0.0, 0.1, 0.3, 2.0, 0.0, 2.0, 30) {
 
     /// create world
     world_ = std::make_unique<raisim::World>();
@@ -28,7 +30,7 @@ public:
     anymal_ = world_->addArticulatedSystem(resourceDir_ + urdfPath);
     anymal_->setName("anymal");
     anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
-    world_->addGround();
+    // world_->addGround();
 
     /// get robot data
     gcDim_ = anymal_->getGeneralizedCoordinateDim();
@@ -69,10 +71,14 @@ public:
     actionStd_.setZero(actionDim_);
     obDouble_.setZero(obDim_);
 
+    /// create sensors
     depthSensor_ = anymal_->getSensorSet("depth_camera")
                        ->getSensor<raisim::DepthCamera>("depth");
     depthSensor_->setMeasurementSource(
         raisim::Sensor::MeasurementSource::RAISIM);
+
+    /// generate obstacles
+    obstacleCourse_.generateObstacles(world_.get());
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
@@ -93,7 +99,9 @@ public:
     /// visualize if it is the first environment
     if (visualizable_) {
       server_ = std::make_unique<raisim::RaisimServer>(world_.get());
-      server_->launchServer();
+      int port;
+      READ_YAML(int, port, cfg["server_port"]);
+      server_->launchServer(port);
       server_->focusOn(anymal_);
     }
   }
@@ -102,6 +110,7 @@ public:
 
   void reset() final {
     anymal_->setState(gc_init_, gv_init_);
+    obstacleCourse_.regenerateObstacles(world_.get());
     updateObservation();
   }
 
@@ -125,9 +134,25 @@ public:
     updateObservation();
 
     rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
-    rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
+    // rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
+    float reward = rewards_.sum();
+    reward += 0.3 * std::min(2.0, gv_[0]);
+    // reward is zero when falling
+    if (gc_[2] < 0.01) {
+      reward = -1;
+    }
+    raisim::Vec<4> quat;
+    raisim::Mat<3, 3> rot;
+    quat[0] = gc_[3];
+    quat[1] = gc_[4];
+    quat[2] = gc_[5];
+    quat[3] = gc_[6];
+    raisim::quatToRotMat(quat, rot);
+    if (rot.e().col(2).dot(Eigen::Vector3d(0, 0, 1)) < 0.5) {
+      reward = -1;
+    }
 
-    return rewards_.sum();
+    return reward;
   }
 
   void updateObservation() {
@@ -172,7 +197,14 @@ public:
     image = Eigen::Map<Eigen::MatrixXf>(im.data(), 64, 64);
   }
 
-  void curriculumUpdate() {};
+  void curriculumUpdate() {
+    float max_height = 0.0;
+    float min_height = 0.0;
+    obstacleCourse_.getObstacleHeight(max_height, max_height);
+    if (max_height < 0.4) {
+      obstacleCourse_.setObstacleHeight(min_height, max_height + 0.0001);
+    }
+  }
 
 private:
   int gcDim_, gvDim_, nJoints_;
@@ -184,6 +216,7 @@ private:
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
   raisim::DepthCamera *depthSensor_;
+  DreamTeam obstacleCourse_;
 
   /// these variables are not in use. They are placed to show you how to create
   /// a random number sampler.
