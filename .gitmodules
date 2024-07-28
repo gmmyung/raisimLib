@@ -4,3 +4,6 @@
 [submodule "raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2"]
 	path = raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2
 	url = https://github.com/gmmyung/tdmpc2.git
+[submodule "raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2-jax"]
+	path = raisimGymTorch/raisimGymTorch/env/envs/rsg_anymal/tdmpc2-jax
+	url = https://github.com/gmmyung/tdmpc2-jax.git
