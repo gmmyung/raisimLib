@@ -6,7 +6,7 @@
 #pragma once
 
 #include "../../RaisimGymEnv.hpp"
-#include "../DreamTeam.hpp"
+#include "DreamTeam.hpp"
 #include <set>
 #include <stdlib.h>
 
@@ -23,6 +23,11 @@ public:
 
     /// create world
     world_ = std::make_unique<raisim::World>();
+
+    unsigned int seed;
+    READ_YAML(int, seed, cfg["seed"]);
+    gen_ = std::mt19937(seed);
+    std::cout << "Environment seed: " << seed << std::endl;
 
     /// add objects
     std::string urdfPath;
@@ -78,7 +83,7 @@ public:
         raisim::Sensor::MeasurementSource::RAISIM);
 
     /// generate obstacles
-    obstacleCourse_.generateObstacles(world_.get());
+    obstacleCourse_.generateObstacles(world_.get(), gen_);
 
     /// action scaling
     actionMean_ = gc_init_.tail(nJoints_);
@@ -110,7 +115,7 @@ public:
 
   void reset() final {
     anymal_->setState(gc_init_, gv_init_);
-    obstacleCourse_.regenerateObstacles(world_.get());
+    obstacleCourse_.regenerateObstacles(world_.get(), gen_);
     updateObservation();
   }
 
@@ -198,9 +203,9 @@ public:
   }
 
   void curriculumUpdate() {
-    float max_height = 0.0;
     float min_height = 0.0;
-    obstacleCourse_.getObstacleHeight(max_height, max_height);
+    float max_height = 0.0;
+    obstacleCourse_.getObstacleHeight(min_height, max_height);
     if (max_height < 0.4) {
       obstacleCourse_.setObstacleHeight(min_height, max_height + 0.0001);
     }
