@@ -24,10 +24,7 @@ public:
     /// create world
     world_ = std::make_unique<raisim::World>();
 
-    unsigned int seed;
-    READ_YAML(int, seed, cfg["seed"]);
-    gen_ = std::mt19937(seed);
-    std::cout << "Environment seed: " << seed << std::endl;
+    gen_ = std::mt19937();
 
     /// add objects
     std::string urdfPath;
@@ -210,6 +207,8 @@ public:
       obstacleCourse_.setObstacleHeight(min_height, max_height + 0.0001);
     }
   }
+
+  void setSeed(int seed) { gen_.seed(seed); }
 
 private:
   int gcDim_, gvDim_, nJoints_;
