@@ -29,6 +29,8 @@ PYBIND11_MODULE(RAISIMGYM_TORCH_ENV_NAME, m) {
       .def("step", &VectorizedEnvironment<ENVIRONMENT>::step)
       .def("setSeed", &VectorizedEnvironment<ENVIRONMENT>::setSeed)
       .def("getRewardInfo", &VectorizedEnvironment<ENVIRONMENT>::getRewardInfo)
+      .def("getTrainingInfo",
+           &VectorizedEnvironment<ENVIRONMENT>::getTrainingInfo)
       .def("close", &VectorizedEnvironment<ENVIRONMENT>::close)
       .def("isTerminalState",
            &VectorizedEnvironment<ENVIRONMENT>::isTerminalState)

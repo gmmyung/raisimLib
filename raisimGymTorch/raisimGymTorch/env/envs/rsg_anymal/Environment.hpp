@@ -6,7 +6,9 @@
 #pragma once
 
 #include "../../RaisimGymEnv.hpp"
-#include "DreamTeam.hpp"
+#include "RaiboController.hpp"
+#include "RandomHeightMapGenerator.hpp"
+#include <random>
 #include <set>
 #include <stdlib.h>
 
@@ -17,86 +19,58 @@ class ENVIRONMENT : public RaisimGymEnv {
 public:
   explicit ENVIRONMENT(const std::string &resourceDir, const Yaml::Node &cfg,
                        bool visualizable)
-      : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable),
-        normDist_(0, 1),
-        obstacleCourse_(100.0, 4.0, 0.0, 0.1, 0.3, 2.0, 0.0, 2.0, 30) {
+      : RaisimGymEnv(resourceDir, cfg), visualizable_(visualizable) {
 
     /// create world
     world_ = std::make_unique<raisim::World>();
 
-    gen_ = std::mt19937();
-
     /// add objects
     std::string urdfPath;
     READ_YAML(std::string, urdfPath, cfg["urdf_path"]);
-    anymal_ = world_->addArticulatedSystem(resourceDir_ + urdfPath);
-    anymal_->setName("anymal");
-    anymal_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
-    // world_->addGround();
+    raibo_ = world_->addArticulatedSystem(resourceDir_ + urdfPath);
+    raibo_->setName("robot");
+    raibo_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
-    /// get robot data
-    gcDim_ = anymal_->getGeneralizedCoordinateDim();
-    gvDim_ = anymal_->getDOF();
-    nJoints_ = gvDim_ - 6;
+    /// create controller
+    controller_.create(world_.get());
+    controller_.setRewardConfig(cfg);
 
-    /// initialize containers
-    gc_.setZero(gcDim_);
-    gc_init_.setZero(gcDim_);
-    gv_.setZero(gvDim_);
-    gv_init_.setZero(gvDim_);
-    pTarget_.setZero(gcDim_);
-    vTarget_.setZero(gvDim_);
-    pTarget12_.setZero(nJoints_);
+    /// add HeightMapGenerator
+    groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
+    groundTypeVector_ << 1.0, 0.0, 0.0;
+    heightMap_ = terrainGenerator_.generateTerrain(world_.get(), groundType_,
+                                                   gen_, uniDist_);
+    footMaterialName_ = {"LF_FOOT_MATERIAL", "RF_FOOT_MATERIAL",
+                         "LH_FOOT_MATERIAL", "RH_FOOT_MATERIAL"};
+    READ_YAML(double, maxTime_, cfg["max_time"])
 
-    /// this is nominal configuration of anymal
-    gc_init_ << 0, 0, 0.50, 1.0, 0.0, 0.0, 0.0, 0.03, 0.4, -0.8, -0.03, 0.4,
-        -0.8, 0.03, -0.4, 0.8, -0.03, -0.4, 0.8;
+    /// Control parameters
+    READ_YAML(double, maxForwardVel_, cfg["max_forward_velocity"])
+    READ_YAML(double, maxCommandYaw_, cfg["max_command_yaw"])
+    READ_YAML(double, maxAngularVel_, cfg["max_angular_velocity"])
 
-    /// set pd gains
-    Eigen::VectorXd jointPgain(gvDim_), jointDgain(gvDim_);
-    double p_gain;
-    double d_gain;
-    READ_YAML(double, p_gain, cfg_["p_gain"])
-    READ_YAML(double, d_gain, cfg_["d_gain"])
-    jointPgain.setZero();
-    jointPgain.tail(nJoints_).setConstant(p_gain);
-    jointDgain.setZero();
-    jointDgain.tail(nJoints_).setConstant(d_gain);
-
-    anymal_->setPdGains(jointPgain, jointDgain);
-    anymal_->setGeneralizedForce(Eigen::VectorXd::Zero(gvDim_));
+    /// Curriculumm factors
+    READ_YAML(int, iterPerCurriculumUpdate_,
+              cfg["curriculum"]["iteration_per_update"])
+    READ_YAML(int, iterPerTerrainCurriculumUpdate_,
+              cfg["curriculum"]["iteration_per_terrain_update"])
+    READ_YAML(double, curriculumFactor_, cfg["curriculum"]["initial_factor"])
+    READ_YAML(double, curriculumDecayFactor_, cfg["curriculum"]["decay_factor"])
+    READ_YAML(double, terrainCurriculumFactor_,
+              cfg["curriculum"]["terrain_initial_factor"])
+    READ_YAML(double, terrainCurriculumDecayFactor_,
+              cfg["curriculum"]["terrain_decay_factor"])
 
     /// MUST BE DONE FOR ALL ENVIRONMENTS
-    obDim_ = 34;
-    actionDim_ = nJoints_;
-    actionMean_.setZero(actionDim_);
-    actionStd_.setZero(actionDim_);
+    obDim_ = controller_.getObDim();
+    actionDim_ = controller_.getActionDim();
     obDouble_.setZero(obDim_);
 
     /// create sensors
-    depthSensor_ = anymal_->getSensorSet("depth_camera")
+    depthSensor_ = raibo_->getSensorSet("d430_front")
                        ->getSensor<raisim::DepthCamera>("depth");
     depthSensor_->setMeasurementSource(
         raisim::Sensor::MeasurementSource::RAISIM);
-
-    /// generate obstacles
-    obstacleCourse_.generateObstacles(world_.get(), gen_);
-
-    /// action scaling
-    actionMean_ = gc_init_.tail(nJoints_);
-    double action_std;
-    READ_YAML(double, action_std,
-              cfg_["action_std"]) /// example of reading params from the config
-    actionStd_.setConstant(action_std);
-
-    /// Reward coefficients
-    rewards_.initializeFromConfigurationFile(cfg["reward"]);
-
-    /// indices of links that should not make contact with ground
-    footIndices_.insert(anymal_->getBodyIdx("LF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RF_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("LH_SHANK"));
-    footIndices_.insert(anymal_->getBodyIdx("RH_SHANK"));
 
     /// visualize if it is the first environment
     if (visualizable_) {
@@ -104,26 +78,51 @@ public:
       int port;
       READ_YAML(int, port, cfg["server_port"]);
       server_->launchServer(port);
-      server_->focusOn(anymal_);
+      server_->focusOn(raibo_);
     }
+
+    /// Just in case
+    reset();
   }
 
   void init() final {}
 
   void reset() final {
-    anymal_->setState(gc_init_, gv_init_);
-    obstacleCourse_.regenerateObstacles(world_.get(), gen_);
-    updateObservation();
+    terrainRandomization();
+    controller_.reset(gen_, uniDist_, heightMap_);
+    controller_.updateStateVariables();
+    resampleCommand();
+  }
+
+  void resampleCommand() {
+    double vel_magnitude = maxForwardVel_ * uniDist_(gen_);
+    double vel_direction = maxCommandYaw_ * 2 * (uniDist_(gen_) - 0.5);
+    double ang_vel = maxAngularVel_ * 2 * (uniDist_(gen_));
+    setCommand(vel_magnitude, vel_direction, ang_vel);
+  }
+
+  void setCommand(double vel_magnitude, double vel_direction, double ang_vel) {
+    Eigen::Vector3d command;
+    command << vel_magnitude * std::cos(vel_direction),
+        vel_magnitude * std::sin(vel_direction), ang_vel;
+    controller_.setCommand(command);
+  }
+
+  std::map<std::string, float> getRewards() final {
+    return controller_.getRewards();
+  }
+
+  std::map<std::string, float> getTrainingInfo() {
+    std::map<std::string, float> infos;
+    infos["curriculum_factor"] = curriculumFactor_;
+    infos["terrain_curriculum_factor"] = terrainCurriculumFactor_;
+    return infos;
   }
 
   float step(const Eigen::Ref<EigenVec> &action) final {
-    /// action scaling
-    pTarget12_ = action.cast<double>();
-    pTarget12_ = pTarget12_.cwiseProduct(actionStd_);
-    pTarget12_ += actionMean_;
-    pTarget_.tail(nJoints_) = pTarget12_;
+    controller_.advance(action);
 
-    anymal_->setPdTarget(pTarget_, vTarget_);
+    int elapsed_sim_steps = 0;
 
     for (int i = 0; i < int(control_dt_ / simulation_dt_ + 1e-10); i++) {
       if (server_)
@@ -131,102 +130,175 @@ public:
       world_->integrate();
       if (server_)
         server_->unlockVisualizationServerMutex();
+      controller_.updateStateVariables();
+      controller_.accumulateRewards(curriculumFactor_, terrainLevel_);
+      elapsed_sim_steps++;
+    }
+    if (uniDist_(gen_) <
+        1 * control_dt_ /
+            (maxTime_ + 1e-8)) { /// 1 times command change in 1 episode
+      resampleCommand();
     }
 
-    updateObservation();
-
-    rewards_.record("torque", anymal_->getGeneralizedForce().squaredNorm());
-    // rewards_.record("forwardVel", std::min(4.0, bodyLinearVel_[0]));
-    float reward = rewards_.sum();
-    reward += 0.3 * std::min(2.0, gv_[0]);
-    // reward is zero when falling
-    if (gc_[2] < 0.01) {
-      reward = -1;
-    }
-    raisim::Vec<4> quat;
-    raisim::Mat<3, 3> rot;
-    quat[0] = gc_[3];
-    quat[1] = gc_[4];
-    quat[2] = gc_[5];
-    quat[3] = gc_[6];
-    raisim::quatToRotMat(quat, rot);
-    if (rot.e().col(2).dot(Eigen::Vector3d(0, 0, 1)) < 0.5) {
-      reward = -1;
-    }
-
-    return reward;
+    return controller_.getRewardSum(elapsed_sim_steps);
   }
 
-  void updateObservation() {
-    anymal_->getState(gc_, gv_);
-    raisim::Vec<4> quat;
-    raisim::Mat<3, 3> rot;
-    quat[0] = gc_[3];
-    quat[1] = gc_[4];
-    quat[2] = gc_[5];
-    quat[3] = gc_[6];
-    raisim::quatToRotMat(quat, rot);
-    bodyLinearVel_ = rot.e().transpose() * gv_.segment(0, 3);
-    bodyAngularVel_ = rot.e().transpose() * gv_.segment(3, 3);
-
-    obDouble_ << gc_[2],                 /// body height
-        rot.e().row(2).transpose(),      /// body orientation
-        gc_.tail(12),                    /// joint angles
-        bodyLinearVel_, bodyAngularVel_, /// body linear&angular velocity
-        gv_.tail(12);                    /// joint velocity
+  bool isTerminalState(float &terminalReward) {
+    if (controller_.gc_.head(2).norm() > terrainGenerator_.size / 2.0) {
+      return true;
+    }
+    return controller_.isTerminalState(terminalReward);
   }
 
   void observe(Eigen::Ref<EigenVec> ob) final {
-    /// convert it to float
+    controller_.updateObservation(false, gen_, normDist_);
+    controller_.getObservation(obDouble_);
     ob = obDouble_.cast<float>();
-  }
-
-  bool isTerminalState(float &terminalReward) final {
-    terminalReward = float(terminalRewardCoeff_);
-
-    /// if the contact body is not feet
-    for (auto &contact : anymal_->getContacts())
-      if (footIndices_.find(contact.getlocalBodyIndex()) == footIndices_.end())
-        return true;
-
-    terminalReward = 0.f;
-    return false;
   }
 
   void depthImage(Eigen::Ref<EigenRowMajorMat> image) final {
     depthSensor_->update(*world_);
     std::vector<float> im = depthSensor_->getDepthArray();
-    image = Eigen::Map<Eigen::MatrixXf>(im.data(), 64, 64);
+    image = Eigen::Map<EigenRowMajorMat>(im.data(), 64, 64);
   }
 
-  void curriculumUpdate() {
-    float min_height = 0.0;
-    float max_height = 0.0;
-    obstacleCourse_.getObstacleHeight(min_height, max_height);
-    if (max_height < 0.4) {
-      obstacleCourse_.setObstacleHeight(min_height, max_height + 0.0001);
+  void terrainRandomization() {
+    for (auto &obj : world_->getObjList()) {
+      if (obj->getName() != "robot") {
+        world_->removeObject(obj);
+      }
+    }
+
+    groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
+
+    terrainLevel_ = terrainCurriculumFactor_ * uniDist_(gen_);
+    Eigen::Vector4d terrainParams;
+    terrainParams(0) = 2 * maxTime_ * maxForwardVel_ -
+                       (2 * maxTime_ * maxForwardVel_ - 20) * terrainLevel_;
+    if (groundType_ == RandomHeightMapGenerator::GroundType::HEIGHT_MAP) {
+      terrainParams(1) = 0.2 + 0.8 * uniDist_(gen_); /// frequency ~ U(0.2, 1.0)
+      terrainParams(2) = 0.2 + 1.2 * terrainLevel_;  /// amplitude 0.2 -> 1.4
+      groundTypeVector_ << 1.0, 0.0, 0.0;
+    } else if (groundType_ ==
+               RandomHeightMapGenerator::GroundType::HEIGHT_MAP_DISCRETE) {
+      terrainParams(1) = 0.2 + 1.0 * terrainLevel_; /// amplitude 0.2 -> 1.2
+      terrainParams(2) =
+          0.02 + 0.13 * uniDist_(gen_); /// step size ~ U(0.02, 0.15)
+      groundTypeVector_ << 1.0, 0.0, 0.0;
+    } else if (groundType_ == RandomHeightMapGenerator::GroundType::STEPS) {
+      terrainParams(1) = 0.1 + 0.4 * uniDist_(gen_);  /// width ~ U(0.1, 0.5)
+      terrainParams(2) = 0.02 + 0.16 * terrainLevel_; /// height 0.02 -> 0.18
+      groundTypeVector_ << 0.0, 1.0, 0.0;
+    } else if (groundType_ ==
+               RandomHeightMapGenerator::GroundType::STEPS_INCLINE) {
+      terrainParams(1) =
+          0.02 + 0.16 * terrainLevel_; /// roughness ~ 0.02 -> 0.18
+      terrainParams(2) = 0.02 + 0.07 * terrainLevel_; /// height 0.02 -> 0.09
+      groundTypeVector_ << 1.0, 0.0, 0.0;
+    } else if (groundType_ == RandomHeightMapGenerator::GroundType::STAIRS) {
+      terrainParams(1) = 0.28 + 0.04 * uniDist_(gen_); /// width ~ U(0.28, 0.32)
+      terrainParams(2) = 0.02 + 0.16 * terrainLevel_;  /// height 0.02 -> 0.18
+      terrainParams(3) = 35.0 / 180 * M_PI * terrainLevel_; /// slope 35 deg
+      groundTypeVector_ << 0.0, 1.0, 0.0;
+    } else if (groundType_ ==
+               RandomHeightMapGenerator::GroundType::NOSING_STAIRS) {
+      terrainParams(1) = 0.28 + 0.04 * uniDist_(gen_); /// width ~ U(0.28, 0.32)
+      terrainParams(2) = 0.02 + 0.16 * terrainLevel_;  /// height 0.02 -> 0.18
+      terrainParams(3) = 35.0 / 180 * M_PI * terrainLevel_; /// slope 35 deg
+      groundTypeVector_ << 0.0, 0.0, 1.0;
+    }
+    if (groundType_ == RandomHeightMapGenerator::GroundType::SLOPE) {
+      terrainParams(1) = 0.2 + 0.6 * uniDist_(gen_); /// frequency ~ U(0.2, 0.8)
+      terrainParams(2) = 0.2 + 0.4 * terrainLevel_;  /// amplitude 0.2 -> 0.6
+      terrainParams(3) = 35.0 / 180 * M_PI * terrainLevel_; /// 35deg
+      groundTypeVector_ << 1.0, 0.0, 0.0;
+    } else if (groundType_ == RandomHeightMapGenerator::GroundType::STAIRS3) {
+      terrainParams(1) = 0.25 + 0.1 * uniDist_(gen_); /// width ~ U(0.25, 0.35)
+      terrainParams(2) = 0.02 + 0.16 * terrainLevel_; /// height 0.02 -> 0.18
+      terrainParams(3) = 35.0 / 180 * M_PI * terrainLevel_; /// 35deg
+      groundTypeVector_ << 0.0, 0.0, 1.0;
+    } else if (groundType_ == RandomHeightMapGenerator::GroundType::TUK) {
+      terrainParams(1) = 0.15 * terrainLevel_; /// height 0 -> 0.15
+      groundTypeVector_ << 0.0, 0.0, 1.0;
+    }
+    terrainGenerator_.setTerrainParams(groundType_, terrainParams);
+    heightMap_ = terrainGenerator_.generateTerrain(world_.get(), groundType_,
+                                                   gen_, uniDist_);
+
+    if (groundType_ == RandomHeightMapGenerator::GroundType::SLOPE) {
+      double minFrictionCoeff = std::max(0.4, std::tan(terrainParams(3)) * 1.3);
+      double interval = 2.0 - minFrictionCoeff;
+      groundFrictionCoeff_ =
+          minFrictionCoeff +
+          interval * uniDist_(gen_); /// c_f ~ U(minFrictionCoeff, 2.0)
+      world_->setDefaultMaterial(groundFrictionCoeff_, 0.0, 0.01);
+      for (int i = 0; i < 4; i++) {
+        world_->setMaterialPairProp(footMaterialName_[i],
+                                    heightMap_->getCollisionObject()->material,
+                                    groundFrictionCoeff_, 0.0, 0.01);
+      }
+    } else {
+      groundFrictionCoeff_ =
+          0.8 + terrainCurriculumFactor_ * 0.8 *
+                    (uniDist_(gen_) - 0.5); /// c_f ~ U(0.4, 1.2)
+      world_->setDefaultMaterial(groundFrictionCoeff_, 0.0, 0.01);
     }
   }
 
-  void setSeed(int seed) { gen_.seed(seed); }
+  void curriculumUpdate() {
+    if (iter_ % iterPerCurriculumUpdate_ == 0) {
+      curriculumFactor_ = std::pow(curriculumFactor_, curriculumDecayFactor_);
+    }
+    if (iter_ % iterPerTerrainCurriculumUpdate_ == 0) {
+      terrainCurriculumFactor_ =
+          std::pow(terrainCurriculumFactor_, terrainCurriculumDecayFactor_);
+    }
+    iter_++;
+  }
+
+  void setSeed(int seed) {
+    gen_.seed(seed);
+    terrainGenerator_.setSeed(seed);
+  }
 
 private:
-  int gcDim_, gvDim_, nJoints_;
   bool visualizable_ = false;
-  raisim::ArticulatedSystem *anymal_;
-  Eigen::VectorXd gc_init_, gv_init_, gc_, gv_, pTarget_, pTarget12_, vTarget_;
+  raisim::ArticulatedSystem *raibo_;
   double terminalRewardCoeff_ = -10.;
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
   raisim::DepthCamera *depthSensor_;
-  DreamTeam obstacleCourse_;
+  double terrainCurriculumFactor_, terrainCurriculumDecayFactor_,
+      terrainLevel_ = 0.;
+  double curriculumFactor_, curriculumDecayFactor_, maxForwardVel_,
+      maxCommandYaw_, maxAngularVel_;
+  double maxTime_;
+  Eigen::Vector3d groundTypeVector_;
+  RandomHeightMapGenerator terrainGenerator_;
+  RandomHeightMapGenerator::GroundType groundType_;
+  raisim::HeightMap *heightMap_;
+  RaiboController controller_;
+  double groundFrictionCoeff_;
+  std::vector<std::string> footMaterialName_;
+  int iter_ = 0;
+  int iterPerCurriculumUpdate_ = 1;
+  int iterPerTerrainCurriculumUpdate_ = 1;
+  static constexpr int terrainTypeNum_ = 6;
 
-  /// these variables are not in use. They are placed to show you how to create
-  /// a random number sampler.
-  std::normal_distribution<double> normDist_;
+  /// these variables are not in use. They are placed to show you how to
+  /// create a random number sampler.
   thread_local static std::mt19937 gen_;
+
+  thread_local static std::normal_distribution<double> normDist_;
+  thread_local static std::uniform_real_distribution<double> uniDist_;
+  thread_local static std::uniform_int_distribution<int> uniIntDist_;
 };
 thread_local std::mt19937 raisim::ENVIRONMENT::gen_;
-
+thread_local std::normal_distribution<double>
+    raisim::ENVIRONMENT::normDist_(0., 1.);
+thread_local std::uniform_real_distribution<double>
+    raisim::ENVIRONMENT::uniDist_(0., 1.);
+thread_local std::uniform_int_distribution<int>
+    raisim::ENVIRONMENT::uniIntDist_(0, raisim::ENVIRONMENT::terrainTypeNum_);
 } // namespace raisim

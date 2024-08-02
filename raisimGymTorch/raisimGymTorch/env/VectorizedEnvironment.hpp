@@ -43,6 +43,7 @@ public:
 
     environments_.reserve(num_envs_);
     rewardInformation_.reserve(num_envs_);
+    trainingInformation_.reserve(num_envs_);
     for (int i = 0; i < num_envs_; i++) {
       environments_.push_back(
           new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0));
@@ -50,8 +51,8 @@ public:
           cfg_["simulation_dt"].template As<double>());
       environments_.back()->setControlTimeStep(
           cfg_["control_dt"].template As<double>());
-      rewardInformation_.push_back(
-          environments_.back()->getRewards().getStdMap());
+      rewardInformation_.push_back(environments_.back()->getRewards());
+      trainingInformation_.push_back(environments_.back()->getRewards());
     }
 
     for (int i = 0; i < num_envs_; i++) {
@@ -98,8 +99,9 @@ public:
 
   void depthImage(std::vector<Eigen::Ref<EigenRowMajorMat>> &image) {
 #pragma omp parallel for schedule(auto)
-    for (int i = 0; i < num_envs_; i++)
+    for (int i = 0; i < num_envs_; i++) {
       environments_[i]->depthImage(image[i]);
+    }
   }
 
   void step(Eigen::Ref<EigenRowMajorMat> &action, Eigen::Ref<EigenVec> &reward,
@@ -185,6 +187,9 @@ public:
   const std::vector<std::map<std::string, float>> &getRewardInfo() {
     return rewardInformation_;
   }
+  const std::vector<std::map<std::string, float>> &getTrainingInfo() {
+    return trainingInformation_;
+  }
 
 private:
   void updateObservationStatisticsAndNormalize(Eigen::Ref<EigenRowMajorMat> &ob,
@@ -220,8 +225,8 @@ private:
                            Eigen::Ref<EigenVec> &reward,
                            Eigen::Ref<EigenBoolVec> &done) {
     reward[agentId] = environments_[agentId]->step(action.row(agentId));
-    rewardInformation_[agentId] =
-        environments_[agentId]->getRewards().getStdMap();
+    rewardInformation_[agentId] = environments_[agentId]->getRewards();
+    trainingInformation_[agentId] = environments_[agentId]->getTrainingInfo();
 
     float terminalReward = 0;
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
@@ -234,6 +239,7 @@ private:
 
   std::vector<ChildEnvironment *> environments_;
   std::vector<std::map<std::string, float>> rewardInformation_;
+  std::vector<std::map<std::string, float>> trainingInformation_;
 
   int num_envs_ = 1;
   int obDim_ = 0, actionDim_ = 0;

@@ -78,6 +78,9 @@ class RaisimGymVecEnv:
     def get_reward_info(self):
         return self.wrapper.getRewardInfo()
 
+    def get_training_info(self):
+        return self.wrapper.getTrainingInfo()
+
     def reset(self):
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self.wrapper.reset()

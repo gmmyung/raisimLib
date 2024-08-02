@@ -35,12 +35,14 @@ public:
   virtual void depthImage(Eigen::Ref<EigenRowMajorMat> ob) = 0;
   virtual float step(const Eigen::Ref<EigenVec> &action) = 0;
   virtual bool isTerminalState(float &terminalReward) = 0;
+  virtual std::map<std::string, float> getRewards() = 0;
   ////////////////////////////////////////
 
   /////// optional methods ///////
   virtual void curriculumUpdate() {};
   virtual void close() {};
   virtual void setSeed(int seed) {};
+  virtual void getTrainingInfo(std::map<std::string, float> &info) {};
   ////////////////////////////////
 
   void setSimulationTimeStep(double dt) {
@@ -60,7 +62,6 @@ public:
   }
   void stopRecordingVideo() { server_->stopRecordingVideo(); }
   void requestScreenShot() { server_->requestSaveScreenshot(); }
-  raisim::Reward &getRewards() { return rewards_; }
 
 protected:
   std::unique_ptr<raisim::World> world_;
@@ -70,7 +71,6 @@ protected:
   Yaml::Node cfg_;
   int obDim_ = 0, actionDim_ = 0;
   std::unique_ptr<raisim::RaisimServer> server_;
-  raisim::Reward rewards_;
 };
 } // namespace raisim
 
