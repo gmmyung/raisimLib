@@ -109,6 +109,7 @@ public:
     raisim::quatToRotMat(quat, baseRot_);
     bodyLinVel_ = baseRot_.e().transpose() * gv_.segment(0, 3);
     bodyAngVel_ = baseRot_.e().transpose() * gv_.segment(3, 3);
+    jointTorque_ = raibo_->getGeneralizedForce().e().tail(nJoints_);
   }
 
   bool advance(const Eigen::Ref<EigenVec> &action) {
@@ -158,6 +159,8 @@ public:
     READ_YAML(double, commandTrackingRewardCoeff,
               cfg["reward"]["command_tracking_reward_coeff"])
     READ_YAML(double, torqueRewardCoeff_, cfg["reward"]["torque_reward_coeff"])
+    READ_YAML(double, bodyContactRewardCoeff_,
+              cfg["reward"]["body_contact_reward_coeff"])
   }
 
   inline void accumulateRewards(const double &cf, const double &terrainLevel) {
@@ -170,6 +173,15 @@ public:
         commandTrackingRewardCoeff;
 
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
+
+    bodyContactReward_ = 0.;
+    for (auto &contact : raibo_->getContacts()) {
+      if (std::find(footIndices_.begin(), footIndices_.end(),
+                    contact.getlocalBodyIndex()) == footIndices_.end()) {
+        bodyContactReward_ = bodyContactRewardCoeff_;
+        break;
+      }
+    }
   }
 
   [[nodiscard]] float getRewardSum(int steps) {
@@ -177,17 +189,19 @@ public:
     double positiveReward, negativeReward;
     stepData_[0] = commandTrackingReward_;
     stepData_[1] = torqueReward_;
+    stepData_[2] = bodyContactReward_;
     stepData_ /= steps;
     positiveReward = stepData_.head(positiveRewardNum).sum();
     negativeReward = stepData_
                          .segment(positiveRewardNum,
                                   stepData_.size() - positiveRewardNum - 2)
                          .sum();
-    stepData_[2] = positiveReward;
-    stepData_[3] = negativeReward;
+    stepData_[3] = positiveReward;
+    stepData_[4] = negativeReward;
 
     commandTrackingReward_ = 0.;
     torqueReward_ = 0.;
+    bodyContactReward_ = 0.;
 
     return float(positiveReward * std::exp(0.1 * negativeReward));
   }
@@ -223,8 +237,9 @@ public:
 
   std::map<std::string, float> getRewards() {
     std::map<std::string, float> rewards;
-    rewards["command_tracking_reward"] = commandTrackingReward_;
-    rewards["torque_reward"] = torqueReward_;
+    rewards["command_tracking_reward"] = stepData_[0];
+    rewards["torque_reward"] = stepData_[1];
+    rewards["body_contact_reward"] = stepData_[2];
     return rewards;
   }
 
@@ -259,6 +274,7 @@ public:
   // reward variables
   double commandTrackingRewardCoeff = 0., commandTrackingReward_ = 0.;
   double torqueRewardCoeff_ = 0., torqueReward_ = 0.;
+  double bodyContactRewardCoeff_ = 0., bodyContactReward_ = 0.;
   double terminalRewardCoeff_ = 0.0;
 
   // exported data
