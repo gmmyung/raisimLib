@@ -48,20 +48,19 @@ public:
 
     stepData_.setZero(4);
 
-    /// indices of links that should not make contact with ground
-    footIndices_.push_back(raibo_->getBodyIdx("LF_SHANK"));
-    footIndices_.push_back(raibo_->getBodyIdx("RF_SHANK"));
-    footIndices_.push_back(raibo_->getBodyIdx("LH_SHANK"));
-    footIndices_.push_back(raibo_->getBodyIdx("RH_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("LF_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("RF_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("LH_SHANK"));
+    footIndices_.insert(raibo_->getBodyIdx("RH_SHANK"));
     RSFATAL_IF(std::any_of(footIndices_.begin(), footIndices_.end(),
                            [](int i) { return i < 0; }),
                "footIndices_ not found")
 
     /// indicies of the foot frame
-    footFrameIndicies_.push_back(raibo_->getFrameIdxByName("LF_S2F"));
-    footFrameIndicies_.push_back(raibo_->getFrameIdxByName("RF_S2F"));
-    footFrameIndicies_.push_back(raibo_->getFrameIdxByName("LH_S2F"));
-    footFrameIndicies_.push_back(raibo_->getFrameIdxByName("RH_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("LF_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("RF_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("LH_S2F"));
+    footFrameIndicies_.insert(raibo_->getFrameIdxByName("RH_S2F"));
     RSFATAL_IF(std::any_of(footFrameIndicies_.begin(), footFrameIndicies_.end(),
                            [](int i) { return i < 0; }),
                "footFrameIndicies_ not found")
@@ -164,7 +163,8 @@ public:
   }
 
   inline void accumulateRewards(const double &cf, const double &terrainLevel) {
-    double linearCommandTrackingReward = 0., angularCommandTrackingReward = 0.;
+    double linearCommandTrackingReward = 0., angularCommandTrackingReward = 0.,
+           bodyContactReward_ = 0.;
     linearCommandTrackingReward -=
         (command_.head(2) - bodyLinVel_.head(2)).squaredNorm();
     angularCommandTrackingReward -= pow((command_(2) - bodyAngVel_(2)), 2);
@@ -174,11 +174,10 @@ public:
 
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
 
-    bodyContactReward_ = 0.;
     for (auto &contact : raibo_->getContacts()) {
-      if (std::find(footIndices_.begin(), footIndices_.end(),
-                    contact.getlocalBodyIndex()) == footIndices_.end()) {
-        bodyContactReward_ = bodyContactRewardCoeff_;
+      if (footIndices_.find(contact.getlocalBodyIndex()) !=
+          footIndices_.end()) {
+        bodyContactReward_ += bodyContactRewardCoeff_;
         break;
       }
     }
@@ -203,15 +202,14 @@ public:
     torqueReward_ = 0.;
     bodyContactReward_ = 0.;
 
-    return float(positiveReward * std::exp(0.1 * negativeReward));
+    return positiveReward + negativeReward;
   }
 
   [[nodiscard]] bool isTerminalState(float &terminalReward) {
     terminalReward = float(terminalRewardCoeff_);
 
     for (auto &contact : raibo_->getContacts())
-      if (std::find(footIndices_.begin(), footIndices_.end(),
-                    contact.getlocalBodyIndex()) == footIndices_.end())
+      if (footIndices_.find(contact.getlocalBodyIndex()) != footIndices_.end())
         return true;
 
     terminalReward = 0.f;
@@ -245,7 +243,7 @@ public:
 
   // robot configuration variables
   raisim::ArticulatedSystem *raibo_;
-  std::vector<size_t> footIndices_, footFrameIndicies_;
+  std::set<size_t> footIndices_, footFrameIndicies_;
   Eigen::VectorXd nominalJointConfig_;
   static constexpr int nJoints_ = 12;
   static constexpr int actionDim_ = 12;
