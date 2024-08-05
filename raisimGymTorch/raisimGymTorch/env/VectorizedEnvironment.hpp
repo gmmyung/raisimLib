@@ -42,8 +42,6 @@ public:
     num_envs_ = cfg_["num_envs"].template As<int>();
 
     environments_.reserve(num_envs_);
-    rewardInformation_.reserve(num_envs_);
-    trainingInformation_.reserve(num_envs_);
     for (int i = 0; i < num_envs_; i++) {
       environments_.push_back(
           new ChildEnvironment(resourceDir_, cfg_, render_ && i == 0));
@@ -51,14 +49,20 @@ public:
           cfg_["simulation_dt"].template As<double>());
       environments_.back()->setControlTimeStep(
           cfg_["control_dt"].template As<double>());
-      rewardInformation_.push_back(environments_.back()->getRewards());
-      trainingInformation_.push_back(environments_.back()->getRewards());
     }
 
     for (int i = 0; i < num_envs_; i++) {
       // only the first environment is visualized
       environments_[i]->init();
       environments_[i]->reset();
+    }
+
+    for (auto &pair : environments_[0]->getRewards()) {
+      rewardInformation_[pair.first].resize(num_envs_);
+    }
+
+    for (auto &pair : environments_[0]->getTrainingInfo()) {
+      trainingInformation_[pair.first].resize(num_envs_);
     }
 
     obDim_ = environments_[0]->getObDim();
@@ -184,10 +188,10 @@ public:
       env->curriculumUpdate();
   };
 
-  const std::vector<std::map<std::string, float>> &getRewardInfo() {
+  const std::map<std::string, std::vector<float>> &getRewardInfo() {
     return rewardInformation_;
   }
-  const std::vector<std::map<std::string, float>> &getTrainingInfo() {
+  const std::map<std::string, std::vector<float>> &getTrainingInfo() {
     return trainingInformation_;
   }
 
@@ -225,8 +229,12 @@ private:
                            Eigen::Ref<EigenVec> &reward,
                            Eigen::Ref<EigenBoolVec> &done) {
     reward[agentId] = environments_[agentId]->step(action.row(agentId));
-    rewardInformation_[agentId] = environments_[agentId]->getRewards();
-    trainingInformation_[agentId] = environments_[agentId]->getTrainingInfo();
+    for (auto &pair : environments_[agentId]->getRewards()) {
+      rewardInformation_[pair.first][agentId] = pair.second;
+    }
+    for (auto &pair : environments_[agentId]->getTrainingInfo()) {
+      trainingInformation_[pair.first][agentId] = pair.second;
+    }
 
     float terminalReward = 0;
     done[agentId] = environments_[agentId]->isTerminalState(terminalReward);
@@ -238,8 +246,8 @@ private:
   }
 
   std::vector<ChildEnvironment *> environments_;
-  std::vector<std::map<std::string, float>> rewardInformation_;
-  std::vector<std::map<std::string, float>> trainingInformation_;
+  std::map<std::string, std::vector<float>> rewardInformation_;
+  std::map<std::string, std::vector<float>> trainingInformation_;
 
   int num_envs_ = 1;
   int obDim_ = 0, actionDim_ = 0;

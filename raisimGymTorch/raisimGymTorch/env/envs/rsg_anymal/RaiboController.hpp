@@ -46,7 +46,7 @@ public:
     pTarget_.setZero(gcDim_);
     vTarget_.setZero(gvDim_);
 
-    stepData_.setZero(4);
+    stepData_.setZero(6);
 
     footIndices_.insert(raibo_->getBodyIdx("LF_SHANK"));
     footIndices_.insert(raibo_->getBodyIdx("RF_SHANK"));
@@ -160,17 +160,26 @@ public:
     READ_YAML(double, torqueRewardCoeff_, cfg["reward"]["torque_reward_coeff"])
     READ_YAML(double, bodyContactRewardCoeff_,
               cfg["reward"]["body_contact_reward_coeff"])
+    READ_YAML(double, pitchRewardCoeff_, cfg["reward"]["pitch_reward_coeff"])
   }
 
   inline void accumulateRewards(const double &cf, const double &terrainLevel) {
-    double linearCommandTrackingReward = 0., angularCommandTrackingReward = 0.,
-           bodyContactReward_ = 0.;
-    linearCommandTrackingReward -=
-        (command_.head(2) - bodyLinVel_.head(2)).squaredNorm();
-    angularCommandTrackingReward -= pow((command_(2) - bodyAngVel_(2)), 2);
+    double linearCommandTrackingReward = 0., angularCommandTrackingReward = 0.;
+    linearCommandTrackingReward +=
+        std::exp(-1.0 * (command_.head(2) - bodyLinVel_.head(2)).squaredNorm());
+    linearCommandTrackingReward *=
+        (1.0 +
+         std::exp(-0.5 * (command_.head(2) - bodyLinVel_.head(2)).norm()));
+    angularCommandTrackingReward +=
+        std::exp(-1.5 * pow((command_(2) - bodyAngVel_(2)), 2));
     commandTrackingReward_ +=
         (linearCommandTrackingReward + angularCommandTrackingReward) *
         commandTrackingRewardCoeff;
+
+    double pitch =
+        baseRot_.e().row(2).transpose().dot(Eigen::Vector3d(0, 0, 1));
+    if (pitch < 0.5)
+      pitchReward_ += pitchRewardCoeff_;
 
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
 
@@ -189,20 +198,22 @@ public:
     stepData_[0] = commandTrackingReward_;
     stepData_[1] = torqueReward_;
     stepData_[2] = bodyContactReward_;
+    stepData_[3] = pitchReward_;
     stepData_ /= steps;
     positiveReward = stepData_.head(positiveRewardNum).sum();
     negativeReward = stepData_
                          .segment(positiveRewardNum,
                                   stepData_.size() - positiveRewardNum - 2)
                          .sum();
-    stepData_[3] = positiveReward;
-    stepData_[4] = negativeReward;
+    stepData_[4] = positiveReward;
+    stepData_[5] = negativeReward;
 
     commandTrackingReward_ = 0.;
     torqueReward_ = 0.;
     bodyContactReward_ = 0.;
+    pitchReward_ = 0.;
 
-    return positiveReward + negativeReward;
+    return float(positiveReward * std::exp(0.1 * negativeReward));
   }
 
   [[nodiscard]] bool isTerminalState(float &terminalReward) {
@@ -238,6 +249,9 @@ public:
     rewards["command_tracking_reward"] = stepData_[0];
     rewards["torque_reward"] = stepData_[1];
     rewards["body_contact_reward"] = stepData_[2];
+    rewards["pitch_reward"] = stepData_[3];
+    rewards["positive_reward"] = stepData_[4];
+    rewards["negative_reward"] = stepData_[5];
     return rewards;
   }
 
@@ -273,6 +287,7 @@ public:
   double commandTrackingRewardCoeff = 0., commandTrackingReward_ = 0.;
   double torqueRewardCoeff_ = 0., torqueReward_ = 0.;
   double bodyContactRewardCoeff_ = 0., bodyContactReward_ = 0.;
+  double pitchRewardCoeff_ = 0., pitchReward_ = 0.;
   double terminalRewardCoeff_ = 0.0;
 
   // exported data

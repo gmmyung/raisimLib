@@ -36,12 +36,14 @@ public:
     controller_.setRewardConfig(cfg);
 
     /// add HeightMapGenerator
-    groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
+    // groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
+    groundType_ = RandomHeightMapGenerator::GroundType::FLAT;
     groundTypeVector_ << 1.0, 0.0, 0.0;
     heightMap_ = terrainGenerator_.generateTerrain(world_.get(), groundType_,
                                                    gen_, uniDist_);
     footMaterialName_ = {"LF_FOOT_MATERIAL", "RF_FOOT_MATERIAL",
                          "LH_FOOT_MATERIAL", "RH_FOOT_MATERIAL"};
+
     READ_YAML(double, maxTime_, cfg["max_time"])
 
     /// Control parameters

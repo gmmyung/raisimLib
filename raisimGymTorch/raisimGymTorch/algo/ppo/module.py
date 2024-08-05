@@ -5,7 +5,7 @@ from torch.distributions import Normal
 
 
 class Actor:
-    def __init__(self, architecture, distribution, device='cpu'):
+    def __init__(self, architecture, distribution, device="cpu"):
         super(Actor, self).__init__()
 
         self.architecture = architecture
@@ -30,8 +30,10 @@ class Actor:
     def noiseless_action(self, obs):
         return self.architecture.architecture(torch.from_numpy(obs).to(self.device))
 
-    def save_deterministic_graph(self, file_name, example_input, device='cpu'):
-        transferred_graph = torch.jit.trace(self.architecture.architecture.to(device), example_input)
+    def save_deterministic_graph(self, file_name, example_input, device="cpu"):
+        transferred_graph = torch.jit.trace(
+            self.architecture.architecture.to(device), example_input
+        )
         torch.jit.save(transferred_graph, file_name)
         self.architecture.architecture.to(self.device)
 
@@ -51,7 +53,7 @@ class Actor:
 
 
 class Critic:
-    def __init__(self, architecture, device='cpu'):
+    def __init__(self, architecture, device="cpu"):
         super(Critic, self).__init__()
         self.architecture = architecture
         self.architecture.to(device)
@@ -78,8 +80,8 @@ class MLP(nn.Module):
         modules = [nn.Linear(input_size, shape[0]), self.activation_fn()]
         scale = [np.sqrt(2)]
 
-        for idx in range(len(shape)-1):
-            modules.append(nn.Linear(shape[idx], shape[idx+1]))
+        for idx in range(len(shape) - 1):
+            modules.append(nn.Linear(shape[idx], shape[idx + 1]))
             modules.append(self.activation_fn())
             scale.append(np.sqrt(2))
 
@@ -93,8 +95,12 @@ class MLP(nn.Module):
 
     @staticmethod
     def init_weights(sequential, scales):
-        [torch.nn.init.orthogonal_(module.weight, gain=scales[idx]) for idx, module in
-         enumerate(mod for mod in sequential if isinstance(mod, nn.Linear))]
+        [
+            torch.nn.init.orthogonal_(module.weight, gain=scales[idx])
+            for idx, module in enumerate(
+                mod for mod in sequential if isinstance(mod, nn.Linear)
+            )
+        ]
 
 
 class MultivariateGaussianDiagonalCovariance(nn.Module):

@@ -480,7 +480,7 @@ public:
       //        uniDist(gen)); for (int xBlock = 0; xBlock < nBlock + 1;
       //        xBlock++) {
       ////          randomizedStepHeight = stepHeight * (0.75 + 0.25 *
-      ///uniDist(gen));
+      /// uniDist(gen));
       //          randomizedStepHeight = stepHeight;
       //          auto Block = world->addBox(size, nGridPerBlock * gridSize,
       //          blockThick, 1000, "default", CollisionGroup(3),
