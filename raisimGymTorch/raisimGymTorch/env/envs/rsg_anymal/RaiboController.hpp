@@ -178,13 +178,13 @@ public:
 
     double pitch =
         baseRot_.e().row(2).transpose().dot(Eigen::Vector3d(0, 0, 1));
-    if (pitch < 0.5)
+    if (pitch < 0.6)
       pitchReward_ += pitchRewardCoeff_;
 
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
 
     for (auto &contact : raibo_->getContacts()) {
-      if (footIndices_.find(contact.getlocalBodyIndex()) !=
+      if (footIndices_.find(contact.getlocalBodyIndex()) ==
           footIndices_.end()) {
         bodyContactReward_ += bodyContactRewardCoeff_;
         break;
@@ -193,34 +193,34 @@ public:
   }
 
   [[nodiscard]] float getRewardSum(int steps) {
-    int positiveRewardNum = 1;
-    double positiveReward, negativeReward;
+    int directRewardNum = 3;
+    double directReward, indirectReward;
     stepData_[0] = commandTrackingReward_;
-    stepData_[1] = torqueReward_;
+    stepData_[1] = pitchReward_;
     stepData_[2] = bodyContactReward_;
-    stepData_[3] = pitchReward_;
+    stepData_[3] = torqueReward_;
     stepData_ /= steps;
-    positiveReward = stepData_.head(positiveRewardNum).sum();
-    negativeReward = stepData_
-                         .segment(positiveRewardNum,
-                                  stepData_.size() - positiveRewardNum - 2)
-                         .sum();
-    stepData_[4] = positiveReward;
-    stepData_[5] = negativeReward;
+    directReward = stepData_.head(directRewardNum).sum();
+    indirectReward =
+        stepData_
+            .segment(directRewardNum, stepData_.size() - directRewardNum - 2)
+            .sum();
+    stepData_[4] = directReward;
+    stepData_[5] = indirectReward;
 
     commandTrackingReward_ = 0.;
     torqueReward_ = 0.;
     bodyContactReward_ = 0.;
     pitchReward_ = 0.;
 
-    return float(positiveReward * std::exp(0.1 * negativeReward));
+    return float(directReward * std::exp(0.1 * indirectReward));
   }
 
   [[nodiscard]] bool isTerminalState(float &terminalReward) {
     terminalReward = float(terminalRewardCoeff_);
 
     for (auto &contact : raibo_->getContacts())
-      if (footIndices_.find(contact.getlocalBodyIndex()) != footIndices_.end())
+      if (footIndices_.find(contact.getlocalBodyIndex()) == footIndices_.end())
         return true;
 
     terminalReward = 0.f;
@@ -250,8 +250,8 @@ public:
     rewards["torque_reward"] = stepData_[1];
     rewards["body_contact_reward"] = stepData_[2];
     rewards["pitch_reward"] = stepData_[3];
-    rewards["positive_reward"] = stepData_[4];
-    rewards["negative_reward"] = stepData_[5];
+    rewards["direct_reward"] = stepData_[4];
+    rewards["indirect_reward"] = stepData_[5];
     return rewards;
   }
 
