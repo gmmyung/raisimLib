@@ -286,7 +286,7 @@ private:
   int iter_ = 0;
   int iterPerCurriculumUpdate_ = 1;
   int iterPerTerrainCurriculumUpdate_ = 1;
-  static constexpr int terrainTypeNum_ = 6;
+  static constexpr int terrainTypeNum_ = 9;
 
   /// these variables are not in use. They are placed to show you how to
   /// create a random number sampler.

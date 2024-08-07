@@ -247,9 +247,9 @@ public:
   std::map<std::string, float> getRewards() {
     std::map<std::string, float> rewards;
     rewards["command_tracking_reward"] = stepData_[0];
-    rewards["torque_reward"] = stepData_[1];
+    rewards["pitch_reward"] = stepData_[1];
     rewards["body_contact_reward"] = stepData_[2];
-    rewards["pitch_reward"] = stepData_[3];
+    rewards["torque_reward"] = stepData_[3];
     rewards["direct_reward"] = stepData_[4];
     rewards["indirect_reward"] = stepData_[5];
     return rewards;
