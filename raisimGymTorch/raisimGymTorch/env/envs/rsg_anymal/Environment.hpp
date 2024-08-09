@@ -99,7 +99,7 @@ public:
   void resampleCommand() {
     double vel_magnitude = maxForwardVel_ * uniDist_(gen_);
     double vel_direction = maxCommandYaw_ * 2 * (uniDist_(gen_) - 0.5);
-    double ang_vel = maxAngularVel_ * 2 * (uniDist_(gen_));
+    double ang_vel = maxAngularVel_ * 2 * (uniDist_(gen_) - 0.5);
     setCommand(vel_magnitude, vel_direction, ang_vel);
   }
 

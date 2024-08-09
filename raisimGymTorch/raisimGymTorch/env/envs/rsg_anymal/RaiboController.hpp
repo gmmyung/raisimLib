@@ -32,7 +32,7 @@ public:
     actionScaled_.setZero(actionDim_);
 
     actionMean_ << nominalJointConfig_;                     /// joint target
-    actionStd_ << Eigen::VectorXd::Constant(nJoints_, 0.3); /// joint target
+    actionStd_ << Eigen::VectorXd::Constant(nJoints_, 1.5); /// joint target
 
     obDouble_.setZero(obDim_);
 
@@ -178,7 +178,7 @@ public:
 
     double pitch =
         baseRot_.e().row(2).transpose().dot(Eigen::Vector3d(0, 0, 1));
-    if (pitch < 0.6)
+    if (pitch < 0.5)
       pitchReward_ += pitchRewardCoeff_;
 
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
