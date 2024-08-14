@@ -32,7 +32,7 @@ public:
     actionScaled_.setZero(actionDim_);
 
     actionMean_ << nominalJointConfig_;                     /// joint target
-    actionStd_ << Eigen::VectorXd::Constant(nJoints_, 1.5); /// joint target
+    actionStd_ << Eigen::VectorXd::Constant(nJoints_, 0.3); /// joint target
 
     obDouble_.setZero(obDim_);
 
@@ -40,7 +40,7 @@ public:
     jointPgain_.setZero(gvDim_);
     jointPgain_.tail(nJoints_).setConstant(100.0);
     jointDgain_.setZero(gvDim_);
-    jointDgain_.tail(nJoints_).setConstant(5.0);
+    jointDgain_.tail(nJoints_).setConstant(2.0);
     raibo_->setPGains(jointPgain_);
     raibo_->setDGains(jointDgain_);
     pTarget_.setZero(gcDim_);
@@ -184,6 +184,7 @@ public:
     torqueReward_ += torqueRewardCoeff_ * jointTorque_.squaredNorm();
 
     for (auto &contact : raibo_->getContacts()) {
+
       if (footIndices_.find(contact.getlocalBodyIndex()) ==
           footIndices_.end()) {
         bodyContactReward_ += bodyContactRewardCoeff_;
