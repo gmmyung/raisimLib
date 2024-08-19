@@ -171,8 +171,8 @@ public:
       }
     }
 
-    // groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
-    groundType_ == RandomHeightMapGenerator::GroundType::FLAT; /// flat terrain
+    groundType_ = RandomHeightMapGenerator::GroundType(uniIntDist_(gen_));
+    // groundType_ == RandomHeightMapGenerator::GroundType::FLAT;
 
     terrainLevel_ = terrainCurriculumFactor_ * uniDist_(gen_);
     Eigen::Vector4d terrainParams;

@@ -31,8 +31,11 @@ public:
     actionStd_.setZero(actionDim_);
     actionScaled_.setZero(actionDim_);
 
-    actionMean_ << nominalJointConfig_;                     /// joint target
-    actionStd_ << Eigen::VectorXd::Constant(nJoints_, 0.3); /// joint target
+    actionMean_ << nominalJointConfig_; /// joint target
+    double actionStdScale;
+    READ_YAML(double, actionStdScale, cfg["action_std"])
+    actionStd_ << Eigen::VectorXd::Constant(nJoints_,
+                                            actionStdScale); /// joint target
 
     obDouble_.setZero(obDim_);
 
