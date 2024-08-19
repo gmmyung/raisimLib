@@ -32,7 +32,7 @@ public:
     raibo_->setControlMode(raisim::ControlMode::PD_PLUS_FEEDFORWARD_TORQUE);
 
     /// create controller
-    controller_.create(world_.get());
+    controller_.create(world_.get(), cfg);
     controller_.setRewardConfig(cfg);
 
     /// add HeightMapGenerator

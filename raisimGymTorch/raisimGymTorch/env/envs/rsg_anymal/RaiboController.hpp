@@ -12,7 +12,7 @@ namespace raisim {
 
 class RaiboController {
 public:
-  inline bool create(raisim::World *world) {
+  inline bool create(raisim::World *world, const Yaml::Node &cfg) {
     raibo_ = reinterpret_cast<raisim::ArticulatedSystem *>(
         world->getObject("robot"));
     gc_.setZero(raibo_->getGeneralizedCoordinateDim());
@@ -37,10 +37,13 @@ public:
     obDouble_.setZero(obDim_);
 
     /// pd controller
+    double pGain, dGain;
+    READ_YAML(double, pGain, cfg["p_gain"])
+    READ_YAML(double, dGain, cfg["d_gain"])
     jointPgain_.setZero(gvDim_);
-    jointPgain_.tail(nJoints_).setConstant(100.0);
+    jointPgain_.tail(nJoints_).setConstant(pGain);
     jointDgain_.setZero(gvDim_);
-    jointDgain_.tail(nJoints_).setConstant(2.0);
+    jointDgain_.tail(nJoints_).setConstant(dGain);
     raibo_->setPGains(jointPgain_);
     raibo_->setDGains(jointDgain_);
     pTarget_.setZero(gcDim_);

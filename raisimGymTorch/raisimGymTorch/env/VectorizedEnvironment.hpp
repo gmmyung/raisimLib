@@ -16,9 +16,10 @@ int THREAD_COUNT;
 
 template <class ChildEnvironment> class VectorizedEnvironment {
 
+  // TODO: Remove normalization completely
 public:
   explicit VectorizedEnvironment(std::string resourceDir, std::string cfg,
-                                 bool normalizeObservation = true)
+                                 bool normalizeObservation = false)
       : resourceDir_(resourceDir), cfgString_(cfg),
         normalizeObservation_(normalizeObservation) {
     Yaml::Parse(cfg_, cfg);
