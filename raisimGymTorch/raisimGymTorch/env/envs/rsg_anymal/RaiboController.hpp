@@ -34,8 +34,9 @@ public:
     actionMean_ << nominalJointConfig_; /// joint target
     double actionStdScale;
     READ_YAML(double, actionStdScale, cfg["action_std"])
-    actionStd_ << Eigen::VectorXd::Constant(nJoints_,
-                                            actionStdScale); /// joint target
+    // First 4 joint are hip joints, which are not needed to be actuated as much
+    actionStd_.tail(nJoints_ - 4).setConstant(actionStdScale);
+    actionStd_.head(4).setConstant(actionStdScale / 2.0);
 
     obDouble_.setZero(obDim_);
 
