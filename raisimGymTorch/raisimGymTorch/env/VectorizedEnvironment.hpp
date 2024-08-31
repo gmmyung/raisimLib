@@ -102,10 +102,13 @@ public:
       updateObservationStatisticsAndNormalize(ob, updateStatistics);
   }
 
-  void depthImage(std::vector<Eigen::Ref<EigenRowMajorMat>> &image) {
+  void getDepthImages(std::vector<Eigen::Ref<EigenRowMajorMat>> &images) {
 #pragma omp parallel for schedule(auto)
     for (int i = 0; i < num_envs_; i++) {
-      environments_[i]->depthImage(image[i]);
+      auto env_images = environments_[i]->getDepthImages();
+      for (int j = 0; j < env_images.size(); j++) {
+        images[j].row(i) = env_images[j];
+      }
     }
   }
 

@@ -68,12 +68,6 @@ public:
     actionDim_ = controller_.getActionDim();
     obDouble_.setZero(obDim_);
 
-    /// create sensors
-    depthSensor_ = raibo_->getSensorSet("d430_front")
-                       ->getSensor<raisim::DepthCamera>("depth");
-    depthSensor_->setMeasurementSource(
-        raisim::Sensor::MeasurementSource::RAISIM);
-
     /// visualize if it is the first environment
     if (visualizable_) {
       server_ = std::make_unique<raisim::RaisimServer>(world_.get());
@@ -91,7 +85,7 @@ public:
 
   void reset() final {
     terrainRandomization();
-    controller_.reset(gen_, uniDist_, heightMap_);
+    controller_.reset(gen_, uniDist_, heightMap_, *world_);
     controller_.updateStateVariables();
     resampleCommand();
   }
@@ -158,10 +152,8 @@ public:
     ob = obDouble_.cast<float>();
   }
 
-  void depthImage(Eigen::Ref<EigenRowMajorMat> image) final {
-    depthSensor_->update(*world_);
-    std::vector<float> im = depthSensor_->getDepthArray();
-    image = Eigen::Map<EigenRowMajorMat>(im.data(), 64, 64);
+  std::vector<Eigen::VectorXf> getDepthImages() {
+    return controller_.getDepthImages(*world_);
   }
 
   void terrainRandomization() {
@@ -271,7 +263,6 @@ private:
   Eigen::VectorXd actionMean_, actionStd_, obDouble_;
   Eigen::Vector3d bodyLinearVel_, bodyAngularVel_;
   std::set<size_t> footIndices_;
-  raisim::DepthCamera *depthSensor_;
   double terrainCurriculumFactor_, terrainCurriculumDecayFactor_,
       terrainLevel_ = 0.;
   double curriculumFactor_, curriculumDecayFactor_, maxForwardVel_,

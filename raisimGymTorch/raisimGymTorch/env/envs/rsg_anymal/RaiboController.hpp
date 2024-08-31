@@ -55,6 +55,15 @@ public:
 
     stepData_.setZero(6);
 
+    depthCameras_.push_back(raibo_->getSensorSet("d430_front")
+                                ->getSensor<raisim::DepthCamera>("depth"));
+    depthCameras_.push_back(raibo_->getSensorSet("d430_rear")
+                                ->getSensor<raisim::DepthCamera>("depth"));
+    for (auto camera : depthCameras_) {
+      camera->setMeasurementSource(raisim::Sensor::MeasurementSource::RAISIM);
+    }
+    depthImages_.resize(2);
+
     footIndices_.push_back(raibo_->getBodyIdx("LF_SHANK"));
     footIndices_.push_back(raibo_->getBodyIdx("RF_SHANK"));
     footIndices_.push_back(raibo_->getBodyIdx("LH_SHANK"));
@@ -76,7 +85,7 @@ public:
   };
 
   void reset(std::mt19937 &gen, std::uniform_real_distribution<double> &uniDist,
-             raisim::HeightMap *heightMap) {
+             raisim::HeightMap *heightMap, raisim::World &world) {
     double initial_heading = uniDist(gen) * 2 * M_PI;
     raisim::Mat<3, 3> rot;
     raisim::angleAxisToRotMat({0, 0, 1}, initial_heading, rot);
@@ -101,6 +110,8 @@ public:
     gc_ << 0, 0, maxNecessaryShift + eps, quat.e(), nominalJointConfig_;
     gv_ = gv_.setZero();
     raibo_->setState(gc_, gv_);
+    for (auto &camera : depthCameras_)
+      camera->update(world);
   }
 
   void updateStateVariables() {
@@ -160,6 +171,15 @@ public:
   }
 
   void getObservation(Eigen::VectorXd &observation) { observation = obDouble_; }
+
+  std::vector<Eigen::VectorXf> getDepthImages(raisim::World &world) {
+    for (int i = 0; i < depthCameras_.size(); i++) {
+      int zero = 0;
+      std::vector<float> im = depthCameras_[i]->getDepthArray();
+      depthImages_[i] = Eigen::VectorXf::Map(im.data(), im.size());
+    }
+    return depthImages_;
+  }
 
   inline void setRewardConfig(const Yaml::Node &cfg) {
     READ_YAML(double, commandTrackingRewardCoeff,
@@ -289,6 +309,7 @@ public:
   // robot configuration variables
   raisim::ArticulatedSystem *raibo_;
   std::vector<size_t> footIndices_, footFrameIndicies_;
+  std::vector<raisim::DepthCamera *> depthCameras_;
   Eigen::VectorXd nominalJointConfig_;
   static constexpr int nJoints_ = 12;
   static constexpr int actionDim_ = 12;
@@ -306,6 +327,7 @@ public:
   // robot observation variables
   Eigen::VectorXd obDouble_;
   Eigen::Vector3d command_;
+  std::vector<Eigen::VectorXf> depthImages_;
 
   // control variables
   Eigen::VectorXd actionMean_, actionStd_, actionScaled_;

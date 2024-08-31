@@ -967,12 +967,12 @@
       xyz="0 0 0" />
   </joint>
 
-  <link name="d435i_front" model="d435i" sensor="realsense435i.xml" />
-  <joint name="d435i_front_joint" type="fixed">
-    <origin rpy="0.0 0.349066 0.0" xyz="0.04748 0.060 0.14221"/>
-    <parent link="camera_mount"/>
-    <child link="d435i_front"/>
-  </joint>
+  <!-- <link name="d435i_front" model="d435i" sensor="realsense435i.xml" /> -->
+  <!-- <joint name="d435i_front_joint" type="fixed"> -->
+  <!--   <origin rpy="0.0 0.349066 0.0" xyz="0.04748 0.060 0.14221"/> -->
+  <!--   <parent link="camera_mount"/> -->
+  <!--   <child link="d435i_front"/> -->
+  <!-- </joint> -->
 
   <link name="d430_front" model="d430" sensor="realsense430.xml" />
   <joint name="d430_front_joint" type="fixed">

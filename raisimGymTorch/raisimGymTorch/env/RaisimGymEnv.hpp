@@ -32,7 +32,6 @@ public:
   virtual void init() = 0;
   virtual void reset() = 0;
   virtual void observe(Eigen::Ref<EigenVec> ob) = 0;
-  virtual void depthImage(Eigen::Ref<EigenRowMajorMat> ob) = 0;
   virtual float step(const Eigen::Ref<EigenVec> &action) = 0;
   virtual bool isTerminalState(float &terminalReward) = 0;
   virtual std::map<std::string, float> getRewards() = 0;

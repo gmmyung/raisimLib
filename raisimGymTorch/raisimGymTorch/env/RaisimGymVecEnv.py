@@ -21,12 +21,22 @@ class RaisimGymVecEnv:
         self.log_prob = np.zeros(self.num_envs, dtype=np.float32)
         self._reward = np.zeros(self.num_envs, dtype=np.float32)
         self._done = np.zeros(self.num_envs, dtype=bool)
-        self._depth = np.zeros((self.num_envs, 64, 64), dtype=np.float32)
+        self._depth = np.zeros((self.num_envs, 64, 36), dtype=np.float32)
         self.rewards = [[] for _ in range(self.num_envs)]
         self.wrapper.setSeed(seed)
         self.count = 0.0
         self.mean = np.zeros(self.num_obs, dtype=np.float32)
         self.var = np.zeros(self.num_obs, dtype=np.float32)
+        self.depth_image_height = 64
+        self.depth_image_width = 36
+        self.num_camera = 2
+        self._raw_depth_images = [
+            np.zeros(
+                (self.num_envs, self.depth_image_height * self.depth_image_width),
+                dtype=np.float32,
+            )
+            for _ in range(self.num_camera)
+        ]
 
     def seed(self, seed=None):
         self.wrapper.setSeed(seed)
@@ -68,6 +78,16 @@ class RaisimGymVecEnv:
     def observe(self, update_statistics=True):
         self.wrapper.observe(self._observation, update_statistics)
         return self._observation
+    
+    # TODO: Add normalization to depth images
+    def get_depth_images(self):
+        self.wrapper.getDepthImages(self._raw_depth_images)
+        return [
+            self._raw_depth_images[i].reshape(
+                self.num_envs, self.depth_image_height, self.depth_image_width
+            )
+            for i in range(self.num_camera)
+        ]
 
     def depth_image(self):
         self.wrapper.depthImage(self._depth)
